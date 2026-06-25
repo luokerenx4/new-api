@@ -31,6 +31,6 @@ func GetPaymentSetting() *PaymentSetting {
 }
 
 func IsPaymentComplianceConfirmed() bool {
-	return paymentSetting.ComplianceConfirmed &&
-		paymentSetting.ComplianceTermsVersion == CurrentComplianceTermsVersion
+	// [slim fork] 移除合规确认门：运营方直接自担责任，不再强制点击声明。
+	return true
 }
