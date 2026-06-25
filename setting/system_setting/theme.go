@@ -10,7 +10,8 @@ type ThemeSettings struct {
 }
 
 var themeSettings = ThemeSettings{
-	Frontend: "classic",
+	// [slim fork] 默认改用 default 主题:classic 的 VChart 1.8 仪表盘会崩(createCanvas)。
+	Frontend: "default",
 }
 
 func init() {
