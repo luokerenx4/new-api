@@ -99,6 +99,7 @@ Current endpoints:
 - `POST /api/openalice/provisioning/tokens`
 - `POST /api/openalice/provisioning/tokens/:id/quota`
 - `POST /api/openalice/provisioning/tokens/:id/status`
+- `POST /api/openalice/provisioning/rate-limits`
 - `GET /api/openalice/provisioning/accounts/:external_account_id/snapshot`
 
 Every mutating request requires `operation_id`. Duplicate operation ids are
@@ -112,6 +113,8 @@ The intended long-term boundary is still narrow:
 - increase or set token/user quota through an auditable operation;
 - freeze or revoke tokens;
 - disable a user;
+- update the Gateway model request rate-limit policy from the Cloud admin plan
+  matrix;
 - return reconciliation snapshots: user quota, token quota, used quota, request
   count, token status, and recent usage totals.
 
@@ -131,6 +134,9 @@ Possible later addition:
   `/api/openalice/provisioning/*` as a private control plane. In production,
   expose only the data plane to users and route provisioning through localhost,
   a private network, or an equivalent internal service boundary.
+- `POST /api/openalice/provisioning/rate-limits` writes Gateway's model request
+  rate-limit option. Keep this endpoint private; it is an operator control-plane
+  action initiated by OpenAlice Cloud, not a customer-facing setting.
 - Keep the existing atomic wallet pre-consume path. It is the correct admission
   pattern for concurrent quota use.
 - Token quota and user quota both matter today. If OpenAlice Cloud wants one

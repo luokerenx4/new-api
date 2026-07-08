@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -48,6 +50,19 @@ type OpenAliceProvisioningQuotaRequest struct {
 type OpenAliceProvisioningStatusRequest struct {
 	OperationId string `json:"operation_id"`
 	Status      int    `json:"status"`
+}
+
+type OpenAliceProvisioningRateLimitPolicyRequest struct {
+	OperationId   string            `json:"operation_id"`
+	Enabled       *bool             `json:"enabled"`
+	WindowMinutes int               `json:"window_minutes"`
+	Groups        map[string][2]int `json:"groups"`
+}
+
+type openAliceProvisioningRateLimitPolicyResponse struct {
+	Enabled       bool              `json:"enabled"`
+	WindowMinutes int               `json:"window_minutes"`
+	Groups        map[string][2]int `json:"groups"`
 }
 
 type openAliceProvisioningUserResponse struct {
@@ -117,6 +132,17 @@ func openAliceProvisioningTokenPayload(token *model.Token, includeKey bool) open
 		payload.Key = token.GetFullKey()
 	}
 	return payload
+}
+
+func openAliceProvisioningRateLimitPolicyPayload() openAliceProvisioningRateLimitPolicyResponse {
+	groups := map[string][2]int{}
+	raw := setting.ModelRequestRateLimitGroup2JSONString()
+	_ = json.Unmarshal([]byte(raw), &groups)
+	return openAliceProvisioningRateLimitPolicyResponse{
+		Enabled:       setting.ModelRequestRateLimitEnabled,
+		WindowMinutes: setting.ModelRequestRateLimitDurationMinutes,
+		Groups:        groups,
+	}
 }
 
 func startOpenAliceProvisioningOperation(c *gin.Context, operationId string, action string, externalAccountId string, request any) (*model.ProvisioningOperation, bool) {
@@ -465,6 +491,57 @@ func OpenAliceProvisioningUpdateTokenStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
+	var req OpenAliceProvisioningRateLimitPolicyRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	op, ok := startOpenAliceProvisioningOperation(c, req.OperationId, "rate_limit_policy.update", "", req)
+	if !ok {
+		return
+	}
+	if req.WindowMinutes < 1 || req.WindowMinutes > 1440 {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, "window_minutes must be between 1 and 1440")
+		return
+	}
+	if len(req.Groups) == 0 {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, "groups is required")
+		return
+	}
+	for group := range req.Groups {
+		if !validOpenAliceProvisioningGroup(group) {
+			openAliceProvisioningError(c, op, http.StatusBadRequest, "invalid group name")
+			return
+		}
+	}
+	groupsJSONBytes, err := json.Marshal(req.Groups)
+	if err != nil {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
+		return
+	}
+	groupsJSON := string(groupsJSONBytes)
+	if err := setting.CheckModelRequestRateLimitGroup(groupsJSON); err != nil {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	if err := model.UpdateOptionsBulk(map[string]string{
+		"ModelRequestRateLimitEnabled":         strconv.FormatBool(enabled),
+		"ModelRequestRateLimitDurationMinutes": strconv.Itoa(req.WindowMinutes),
+		"ModelRequestRateLimitGroup":           groupsJSON,
+	}); err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response := gin.H{"success": true, "data": openAliceProvisioningRateLimitPolicyPayload()}
+	finishOpenAliceProvisioningOperation(op, response, "")
+	c.JSON(http.StatusOK, response)
+}
+
 func OpenAliceProvisioningSnapshot(c *gin.Context) {
 	externalAccountId := normalizeOpenAliceExternalAccountId(c.Param("external_account_id"))
 	user, err := model.GetUserByExternalAccountId(externalAccountId, true)
@@ -492,6 +569,20 @@ func OpenAliceProvisioningSnapshot(c *gin.Context) {
 			"tokens": tokenPayloads,
 		},
 	})
+}
+
+func validOpenAliceProvisioningGroup(group string) bool {
+	group = strings.TrimSpace(group)
+	if group == "" || len(group) > 64 {
+		return false
+	}
+	for _, r := range group {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func OpenAliceProvisioningTokenIdParam(c *gin.Context) {

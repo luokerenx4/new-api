@@ -105,6 +105,8 @@ OPENALICE_PROVISIONING_TOKEN=...
 Cloud should call `/api/openalice/provisioning/*` with either
 `Authorization: Bearer <token>` or `X-OpenAlice-Provisioning-Token: <token>`.
 The provisioning API is disabled when this variable is empty.
+OpenAlice Cloud uses this private boundary for managed account/token work and
+for operator-owned rate-limit policy sync.
 
 ## Development
 

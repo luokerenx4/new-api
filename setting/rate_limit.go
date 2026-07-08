@@ -28,8 +28,8 @@ func ModelRequestRateLimitGroup2JSONString() string {
 }
 
 func UpdateModelRequestRateLimitGroupByJSONString(jsonStr string) error {
-	ModelRequestRateLimitMutex.RLock()
-	defer ModelRequestRateLimitMutex.RUnlock()
+	ModelRequestRateLimitMutex.Lock()
+	defer ModelRequestRateLimitMutex.Unlock()
 
 	ModelRequestRateLimitGroup = make(map[string][2]int)
 	return json.Unmarshal([]byte(jsonStr), &ModelRequestRateLimitGroup)
@@ -57,7 +57,7 @@ func CheckModelRequestRateLimitGroup(jsonStr string) error {
 		return err
 	}
 	for group, limits := range checkModelRequestRateLimitGroup {
-		if limits[0] < 0 || limits[1] < 1 {
+		if limits[0] < 0 || limits[1] < 0 {
 			return fmt.Errorf("group %s has negative rate limit values: [%d, %d]", group, limits[0], limits[1])
 		}
 		if limits[0] > math.MaxInt32 || limits[1] > math.MaxInt32 {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -29,16 +30,33 @@ type openAliceProvisioningTokenData struct {
 func setupOpenAliceProvisioningControllerTestDB(t *testing.T) {
 	t.Helper()
 	db := openTokenControllerTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.ProvisioningOperation{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Option{}, &model.ProvisioningOperation{}))
 
 	originalQuotaForNewUser := common.QuotaForNewUser
 	originalBatchUpdateEnabled := common.BatchUpdateEnabled
+	originalRateLimitEnabled := setting.ModelRequestRateLimitEnabled
+	originalRateLimitDuration := setting.ModelRequestRateLimitDurationMinutes
+	originalRateLimitCount := setting.ModelRequestRateLimitCount
+	originalRateLimitSuccessCount := setting.ModelRequestRateLimitSuccessCount
+	originalRateLimitGroup := setting.ModelRequestRateLimitGroup2JSONString()
 	t.Cleanup(func() {
 		common.QuotaForNewUser = originalQuotaForNewUser
 		common.BatchUpdateEnabled = originalBatchUpdateEnabled
+		setting.ModelRequestRateLimitEnabled = originalRateLimitEnabled
+		setting.ModelRequestRateLimitDurationMinutes = originalRateLimitDuration
+		setting.ModelRequestRateLimitCount = originalRateLimitCount
+		setting.ModelRequestRateLimitSuccessCount = originalRateLimitSuccessCount
+		_ = setting.UpdateModelRequestRateLimitGroupByJSONString(originalRateLimitGroup)
+		model.InitOptionMap()
 	})
 	common.QuotaForNewUser = 0
 	common.BatchUpdateEnabled = false
+	setting.ModelRequestRateLimitEnabled = false
+	setting.ModelRequestRateLimitDurationMinutes = 1
+	setting.ModelRequestRateLimitCount = 0
+	setting.ModelRequestRateLimitSuccessCount = 1000
+	_ = setting.UpdateModelRequestRateLimitGroupByJSONString(`{}`)
+	model.InitOptionMap()
 }
 
 func newOpenAliceProvisioningContext(t *testing.T, body any) (*gin.Context, *httptest.ResponseRecorder) {
@@ -116,4 +134,59 @@ func TestOpenAliceProvisioningRejectsDuplicateOperationId(t *testing.T) {
 	ctx, recorder = newOpenAliceProvisioningContext(t, req)
 	OpenAliceProvisioningUpsertUser(ctx)
 	require.Equal(t, http.StatusConflict, recorder.Code)
+}
+
+func TestOpenAliceProvisioningUpdatesRateLimitPolicy(t *testing.T) {
+	setupOpenAliceProvisioningControllerTestDB(t)
+
+	enabled := true
+	req := OpenAliceProvisioningRateLimitPolicyRequest{
+		OperationId:   "op-rate-limit-policy",
+		Enabled:       &enabled,
+		WindowMinutes: 2,
+		Groups: map[string][2]int{
+			"free":    {20, 10},
+			"starter": {120, 100},
+			"pro":     {600, 500},
+			"scale":   {1500, 1200},
+		},
+	}
+	ctx, recorder := newOpenAliceProvisioningContext(t, req)
+	OpenAliceProvisioningUpdateRateLimitPolicy(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	require.True(t, setting.ModelRequestRateLimitEnabled)
+	require.Equal(t, 2, setting.ModelRequestRateLimitDurationMinutes)
+	total, success, found := setting.GetGroupRateLimit("pro")
+	require.True(t, found)
+	require.Equal(t, 600, total)
+	require.Equal(t, 500, success)
+
+	var option model.Option
+	require.NoError(t, model.DB.First(&option, "key = ?", "ModelRequestRateLimitGroup").Error)
+	require.Contains(t, option.Value, `"pro"`)
+
+	op, err := model.GetProvisioningOperationByOperationId("op-rate-limit-policy")
+	require.NoError(t, err)
+	require.Equal(t, model.ProvisioningOperationStatusSuccess, op.Status)
+	require.Contains(t, op.ResponsePayload, `"window_minutes":2`)
+}
+
+func TestOpenAliceProvisioningRejectsInvalidRateLimitPolicy(t *testing.T) {
+	setupOpenAliceProvisioningControllerTestDB(t)
+
+	req := OpenAliceProvisioningRateLimitPolicyRequest{
+		OperationId:   "op-rate-limit-invalid",
+		WindowMinutes: 0,
+		Groups: map[string][2]int{
+			"bad group": {1, 1},
+		},
+	}
+	ctx, recorder := newOpenAliceProvisioningContext(t, req)
+	OpenAliceProvisioningUpdateRateLimitPolicy(ctx)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	op, err := model.GetProvisioningOperationByOperationId("op-rate-limit-invalid")
+	require.NoError(t, err)
+	require.Equal(t, model.ProvisioningOperationStatusFailed, op.Status)
 }

@@ -288,6 +288,7 @@ func SetApiRouter(router *gin.Engine) {
 			openAliceProvisioningRoute.POST("/tokens", controller.OpenAliceProvisioningCreateToken)
 			openAliceProvisioningRoute.POST("/tokens/:id/quota", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningAdjustTokenQuota)
 			openAliceProvisioningRoute.POST("/tokens/:id/status", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningUpdateTokenStatus)
+			openAliceProvisioningRoute.POST("/rate-limits", controller.OpenAliceProvisioningUpdateRateLimitPolicy)
 			openAliceProvisioningRoute.GET("/accounts/:external_account_id/snapshot", controller.OpenAliceProvisioningSnapshot)
 		}
 
