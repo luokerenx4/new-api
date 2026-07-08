@@ -45,6 +45,9 @@ func (l *InMemoryRateLimiter) clearExpiredItems() {
 func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration int64) bool {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
+	if maxRequestNum <= 0 {
+		return true
+	}
 	// [old <-- new]
 	queue, ok := l.store[key]
 	now := time.Now().Unix()
@@ -67,4 +70,21 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 		*(l.store[key]) = append(*(l.store[key]), now)
 	}
 	return true
+}
+
+// Allow checks whether a request would fit the current window without recording
+// a new timestamp. Use this for limits that should be recorded after a later
+// success condition is known.
+func (l *InMemoryRateLimiter) Allow(key string, maxRequestNum int, duration int64) bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if maxRequestNum <= 0 {
+		return true
+	}
+	queue, ok := l.store[key]
+	if !ok || len(*queue) < maxRequestNum {
+		return true
+	}
+	now := time.Now().Unix()
+	return now-(*queue)[0] >= duration
 }
