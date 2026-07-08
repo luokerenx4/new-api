@@ -235,4 +235,20 @@ func TestOpenAliceProvisioningRejectsInvalidRateLimitPolicy(t *testing.T) {
 	op, err := model.GetProvisioningOperationByOperationId("op-rate-limit-invalid")
 	require.NoError(t, err)
 	require.Equal(t, model.ProvisioningOperationStatusFailed, op.Status)
+
+	req = OpenAliceProvisioningRateLimitPolicyRequest{
+		OperationId:   "op-rate-limit-invalid-success-cap",
+		WindowMinutes: 1,
+		Groups: map[string][2]int{
+			"free": {3, 6},
+		},
+	}
+	ctx, recorder = newOpenAliceProvisioningContext(t, req)
+	OpenAliceProvisioningUpdateRateLimitPolicy(ctx)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "success rate limit cannot exceed total rate limit")
+
+	op, err = model.GetProvisioningOperationByOperationId("op-rate-limit-invalid-success-cap")
+	require.NoError(t, err)
+	require.Equal(t, model.ProvisioningOperationStatusFailed, op.Status)
 }
