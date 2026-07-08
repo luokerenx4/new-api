@@ -90,7 +90,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			return
 		}
 		if !allowed {
-			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("您已达到请求数限制：%d分钟内最多请求%d次", setting.ModelRequestRateLimitDurationMinutes, successMaxCount))
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestSuccessRateLimitMessage(successMaxCount))
 			return
 		}
 
@@ -114,7 +114,8 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			}
 
 			if !allowed {
-				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("您已达到总请求数限制：%d分钟内最多请求%d次，包括失败次数，请检查您的请求是否正确", setting.ModelRequestRateLimitDurationMinutes, totalMaxCount))
+				abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestTotalRateLimitMessage(totalMaxCount))
+				return
 			}
 		}
 
@@ -139,15 +140,13 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 
 		// 1. 检查总请求数限制（当totalMaxCount为0时跳过）
 		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestTotalRateLimitMessage(totalMaxCount))
 			return
 		}
 
 		// 2. 检查成功请求数限制
 		if successMaxCount > 0 && !inMemoryRateLimiter.Allow(successKey, successMaxCount, duration) {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestSuccessRateLimitMessage(successMaxCount))
 			return
 		}
 
@@ -159,6 +158,14 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 			inMemoryRateLimiter.Request(successKey, successMaxCount, duration)
 		}
 	}
+}
+
+func modelRequestSuccessRateLimitMessage(maxCount int) string {
+	return fmt.Sprintf("您已达到请求数限制：%d分钟内最多请求%d次", setting.ModelRequestRateLimitDurationMinutes, maxCount)
+}
+
+func modelRequestTotalRateLimitMessage(maxCount int) string {
+	return fmt.Sprintf("您已达到总请求数限制：%d分钟内最多请求%d次，包括失败次数，请检查您的请求是否正确", setting.ModelRequestRateLimitDurationMinutes, maxCount)
 }
 
 // ModelRequestRateLimit 模型请求限流中间件
