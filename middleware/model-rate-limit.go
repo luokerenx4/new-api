@@ -138,15 +138,15 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		totalKey := ModelRequestRateLimitCountMark + userId
 		successKey := ModelRequestRateLimitSuccessCountMark + userId
 
-		// 1. 检查总请求数限制（当totalMaxCount为0时跳过）
-		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
-			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestTotalRateLimitMessage(totalMaxCount))
+		// 1. 检查成功请求数限制
+		if successMaxCount > 0 && !inMemoryRateLimiter.Allow(successKey, successMaxCount, duration) {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestSuccessRateLimitMessage(successMaxCount))
 			return
 		}
 
-		// 2. 检查成功请求数限制
-		if successMaxCount > 0 && !inMemoryRateLimiter.Allow(successKey, successMaxCount, duration) {
-			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestSuccessRateLimitMessage(successMaxCount))
+		// 2. 检查总请求数限制（当totalMaxCount为0时跳过）
+		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, modelRequestTotalRateLimitMessage(totalMaxCount))
 			return
 		}
 

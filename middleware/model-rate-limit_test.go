@@ -19,10 +19,10 @@ func TestMemoryModelRequestRateLimitCountsOnlySuccessfulRequestsForSuccessCap(t 
 	configureMemoryModelRateLimit(t, `{"free":[0,1]}`, 0, 1)
 
 	router := gin.New()
-	router.GET("/fail", gatewayIdentity("free"), ModelRequestRateLimit(), func(c *gin.Context) {
+	router.GET("/fail", gatewayIdentity(4201, "free"), ModelRequestRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 	})
-	router.GET("/ok", gatewayIdentity("free"), ModelRequestRateLimit(), func(c *gin.Context) {
+	router.GET("/ok", gatewayIdentity(4201, "free"), ModelRequestRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
@@ -39,7 +39,7 @@ func TestMemoryModelRequestRateLimitReturnsOpenAIErrorForTotalCap(t *testing.T) 
 	configureMemoryModelRateLimit(t, `{"free":[1,0]}`, 0, 0)
 
 	router := gin.New()
-	router.GET("/ok", gatewayIdentity("free"), ModelRequestRateLimit(), func(c *gin.Context) {
+	router.GET("/ok", gatewayIdentity(4202, "free"), ModelRequestRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
@@ -47,6 +47,21 @@ func TestMemoryModelRequestRateLimitReturnsOpenAIErrorForTotalCap(t *testing.T) 
 	limited := performModelRateLimitRequest(router, "/ok")
 	require.Equal(t, http.StatusTooManyRequests, limited.Code)
 	requireOpenAIErrorMessage(t, limited, "总请求数限制")
+}
+
+func TestMemoryModelRequestRateLimitPrioritizesSuccessCapOverTotalCap(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	configureMemoryModelRateLimit(t, `{"free":[1,1]}`, 0, 0)
+
+	router := gin.New()
+	router.GET("/ok", gatewayIdentity(4203, "free"), ModelRequestRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	require.Equal(t, http.StatusOK, performModelRateLimitRequest(router, "/ok").Code)
+	successLimited := performModelRateLimitRequest(router, "/ok")
+	require.Equal(t, http.StatusTooManyRequests, successLimited.Code)
+	requireOpenAIErrorMessage(t, successLimited, "请求数限制")
 }
 
 func performModelRateLimitRequest(router http.Handler, path string) *httptest.ResponseRecorder {
@@ -71,7 +86,6 @@ func configureMemoryModelRateLimit(t *testing.T, groupJSON string, globalTotal, 
 	setting.ModelRequestRateLimitCount = globalTotal
 	setting.ModelRequestRateLimitSuccessCount = globalSuccess
 	require.NoError(t, setting.UpdateModelRequestRateLimitGroupByJSONString(groupJSON))
-	inMemoryRateLimiter = common.InMemoryRateLimiter{}
 
 	t.Cleanup(func() {
 		common.RedisEnabled = originalRedisEnabled
@@ -80,13 +94,12 @@ func configureMemoryModelRateLimit(t *testing.T, groupJSON string, globalTotal, 
 		setting.ModelRequestRateLimitCount = originalCount
 		setting.ModelRequestRateLimitSuccessCount = originalSuccessCount
 		_ = setting.UpdateModelRequestRateLimitGroupByJSONString(originalGroup)
-		inMemoryRateLimiter = common.InMemoryRateLimiter{}
 	})
 }
 
-func gatewayIdentity(group string) gin.HandlerFunc {
+func gatewayIdentity(userID int, group string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set("id", 42)
+		c.Set("id", userID)
 		c.Set(string(constant.ContextKeyTokenGroup), group)
 		c.Next()
 	}
