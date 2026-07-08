@@ -267,6 +267,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	if err := ensureUserExternalAccountIDSQLite(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -315,6 +318,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := ensureUserExternalAccountIDSQLite(); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 
@@ -487,6 +493,37 @@ func clickHouseCreateTableHasTTL(createTableSQL string) bool {
 type sqliteColumnDef struct {
 	Name string
 	DDL  string
+}
+
+func ensureUserExternalAccountIDSQLite() error {
+	if !common.UsingMainDatabase(common.DatabaseTypeSQLite) {
+		return nil
+	}
+	const tableName = "users"
+	const columnName = "external_account_id"
+	const indexName = "idx_users_external_account_id"
+	if !DB.Migrator().HasTable(tableName) {
+		return nil
+	}
+	var cols []struct {
+		Name string `gorm:"column:name"`
+	}
+	if err := DB.Raw("PRAGMA table_info(`" + tableName + "`)").Scan(&cols).Error; err != nil {
+		return err
+	}
+	hasColumn := false
+	for _, col := range cols {
+		if col.Name == columnName {
+			hasColumn = true
+			break
+		}
+	}
+	if !hasColumn {
+		if err := DB.Exec("ALTER TABLE `" + tableName + "` ADD COLUMN `" + columnName + "` varchar(128)").Error; err != nil {
+			return err
+		}
+	}
+	return DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS `" + indexName + "` ON `" + tableName + "`(`" + columnName + "`) WHERE `" + columnName + "` IS NOT NULL").Error
 }
 
 func ensureSubscriptionPlanTableSQLite() error {

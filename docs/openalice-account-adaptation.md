@@ -56,6 +56,31 @@ When enabled:
 This preserves the mature execution path while removing the gateway as an
 independent consumer SaaS surface.
 
+## Local Cloud Development
+
+For local OpenAlice Cloud integration, start the gateway with SQLite and Redis
+disabled explicitly:
+
+```sh
+PORT=6080 \
+SQLITE_PATH=one-api.db \
+OPENALICE_PROVISIONING_TOKEN=dev-provisioning-secret \
+scripts/dev-openalice-sqlite.sh
+```
+
+The script intentionally clears `SQL_DSN`, `LOG_SQL_DSN`, and
+`REDIS_CONN_STRING` so a checked-in or local `.env` cannot accidentally pull the
+process toward Postgres or a missing Redis instance during a quick Cloud smoke.
+
+Then point OpenAlice Cloud at it:
+
+```env
+PUBLIC_GATEWAY_BASE_URL=http://localhost:6080
+ALICE_AI_GATEWAY_CONTROL_BASE_URL=http://localhost:6080
+ALICE_AI_GATEWAY_PROVISIONING_TOKEN=dev-provisioning-secret
+GATEWAY_KEY_ENCRYPTION_SECRET=dev-key-encryption-secret
+```
+
 ## Provisioning Boundary
 
 The first Cloud-facing provisioning surface lives under:
@@ -102,6 +127,10 @@ Possible later addition:
 
 ## Safety Notes
 
+- Treat `/v1/*` as the public data plane and
+  `/api/openalice/provisioning/*` as a private control plane. In production,
+  expose only the data plane to users and route provisioning through localhost,
+  a private network, or an equivalent internal service boundary.
 - Keep the existing atomic wallet pre-consume path. It is the correct admission
   pattern for concurrent quota use.
 - Token quota and user quota both matter today. If OpenAlice Cloud wants one
