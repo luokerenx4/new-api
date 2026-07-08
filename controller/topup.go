@@ -187,6 +187,9 @@ func getMinTopup() int64 {
 }
 
 func RequestEpay(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
@@ -412,6 +415,9 @@ func EpayNotify(c *gin.Context) {
 }
 
 func RequestAmount(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	var req AmountRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {

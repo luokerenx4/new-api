@@ -14,7 +14,7 @@ import (
 
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
-var SystemName = "New API"
+var SystemName = "Alice AI Gateway"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
@@ -90,6 +90,8 @@ var WeChatAuthEnabled = false
 var TelegramOAuthEnabled = false
 var TurnstileCheckEnabled = false
 var RegisterEnabled = true
+var OpenAliceManagedMode = false
+var OpenAliceProvisioningToken = ""
 
 var EmailDomainRestrictionEnabled = false // 是否启用邮箱域名限制
 var EmailAliasRestrictionEnabled = false  // 是否启用邮箱别名限制

@@ -81,6 +81,13 @@ func InitEnv() {
 	// Initialize variables from constants.go that were using environment variables
 	DebugEnabled = os.Getenv("DEBUG") == "true"
 	MemoryCacheEnabled = os.Getenv("MEMORY_CACHE_ENABLED") == "true"
+	OpenAliceManagedMode = GetEnvOrDefaultBool("OPENALICE_MANAGED_MODE", false)
+	OpenAliceProvisioningToken = strings.TrimSpace(GetEnvOrDefaultString("OPENALICE_PROVISIONING_TOKEN", ""))
+	if OpenAliceManagedMode {
+		RegisterEnabled = false
+		PasswordRegisterEnabled = false
+		QuotaForNewUser = 0
+	}
 	IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
 	initNodeNameIdentity()
 	TLSInsecureSkipVerify = GetEnvOrDefaultBool("TLS_INSECURE_SKIP_VERIFY", false)

@@ -281,6 +281,16 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
 
+		openAliceProvisioningRoute := apiRouter.Group("/openalice/provisioning")
+		openAliceProvisioningRoute.Use(middleware.OpenAliceProvisioningAuth())
+		{
+			openAliceProvisioningRoute.POST("/users/upsert", controller.OpenAliceProvisioningUpsertUser)
+			openAliceProvisioningRoute.POST("/tokens", controller.OpenAliceProvisioningCreateToken)
+			openAliceProvisioningRoute.POST("/tokens/:id/quota", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningAdjustTokenQuota)
+			openAliceProvisioningRoute.POST("/tokens/:id/status", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningUpdateTokenStatus)
+			openAliceProvisioningRoute.GET("/accounts/:external_account_id/snapshot", controller.OpenAliceProvisioningSnapshot)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

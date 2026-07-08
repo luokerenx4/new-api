@@ -22,6 +22,9 @@ type SubscriptionEpayPayRequest struct {
 }
 
 func SubscriptionRequestEpay(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}

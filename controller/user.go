@@ -174,6 +174,9 @@ func Logout(c *gin.Context) {
 }
 
 func Register(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	if !common.RegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
 		return
@@ -1160,6 +1163,9 @@ func getTopUpLock(userID int) *topUpTryLock {
 }
 
 func TopUp(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	if !operation_setting.IsPaymentComplianceConfirmed() {
 		common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
 		return

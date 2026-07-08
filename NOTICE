@@ -1,4 +1,8 @@
-new-api Notices
+Alice AI Gateway Notices
+
+Alice AI Gateway is a modified distribution of New API operated as the
+OpenAlice AI gateway data plane. OpenAlice-specific service naming does not
+remove or replace the upstream attribution below.
 
 new-api
 Copyright (c) QuantumNous and contributors.

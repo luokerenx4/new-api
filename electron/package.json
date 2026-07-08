@@ -1,7 +1,7 @@
 {
-  "name": "new-api-electron",
+  "name": "alice-ai-gateway-electron",
   "version": "1.0.0",
-  "description": "New API - AI Model Gateway Desktop Application",
+  "description": "Alice AI Gateway - OpenAlice AI gateway data-plane desktop wrapper",
   "main": "main.js",
   "scripts": {
     "start-app": "electron .",
@@ -29,8 +29,8 @@
     "electron-builder": "^26.7.0"
   },
   "build": {
-    "appId": "com.newapi.desktop",
-    "productName": "New-API-App",
+    "appId": "com.openalice.alice-ai-gateway.desktop",
+    "productName": "Alice AI Gateway",
     "publish": null,
     "directories": {
       "output": "dist"
@@ -57,8 +57,8 @@
       ],
       "extraResources": [
         {
-          "from": "../new-api",
-          "to": "bin/new-api"
+          "from": "../alice-ai-gateway",
+          "to": "bin/alice-ai-gateway"
         },
         {
           "from": "../web/dist",
@@ -94,8 +94,8 @@
       ],
       "extraResources": [
         {
-          "from": "../new-api.exe",
-          "to": "bin/new-api.exe"
+          "from": "../alice-ai-gateway.exe",
+          "to": "bin/alice-ai-gateway.exe"
         },
         {
           "from": "../LICENSE",
@@ -128,8 +128,8 @@
       "category": "Development",
       "extraResources": [
         {
-          "from": "../new-api",
-          "to": "bin/new-api"
+          "from": "../alice-ai-gateway",
+          "to": "bin/alice-ai-gateway"
         },
         {
           "from": "../LICENSE",

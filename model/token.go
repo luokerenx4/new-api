@@ -432,6 +432,40 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 	return err
 }
 
+func AdjustTokenRemainQuota(id int, key string, delta int) (ok bool, err error) {
+	if delta == 0 {
+		return true, nil
+	}
+	query := DB.Model(&Token{}).Where("id = ?", id)
+	if delta < 0 {
+		query = query.Where("remain_quota >= ?", -delta)
+	}
+	res := query.Updates(map[string]interface{}{
+		"remain_quota":  gorm.Expr("remain_quota + ?", delta),
+		"accessed_time": common.GetTimestamp(),
+	})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return false, nil
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			var cacheErr error
+			if delta > 0 {
+				cacheErr = cacheIncrTokenQuota(key, int64(delta))
+			} else {
+				cacheErr = cacheDecrTokenQuota(key, int64(-delta))
+			}
+			if cacheErr != nil {
+				common.SysLog("failed to adjust token quota cache: " + cacheErr.Error())
+			}
+		})
+	}
+	return true, nil
+}
+
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
 	var total int64

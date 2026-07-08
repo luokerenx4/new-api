@@ -1,10 +1,15 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
 )
+
+// ErrInsufficientWalletQuota 表示钱包余额不足以覆盖本次预扣。
+// [slim fork] 用于把原子守卫预留的"余额不足"结果上抛成可识别的 403。
+var ErrInsufficientWalletQuota = errors.New("钱包额度不足")
 
 // ---------------------------------------------------------------------------
 // FundingSource — 资金来源接口（钱包 or 订阅）
@@ -37,8 +42,14 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	if amount <= 0 {
 		return nil
 	}
-	if err := model.DecreaseUserQuota(w.userId, amount, false); err != nil {
+	// [slim fork] 原子守卫预留:把"读→判→扣"塌缩成一条带谓词的 UPDATE,
+	// DB 行锁串行化判断与扣减,N 路齐发也只放过余额够付的那几发,堵住越扣竞态。
+	ok, err := model.TryPreConsumeUserQuota(w.userId, amount)
+	if err != nil {
 		return err
+	}
+	if !ok {
+		return ErrInsufficientWalletQuota
 	}
 	w.consumed = amount
 	return nil

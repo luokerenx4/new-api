@@ -22,37 +22,38 @@ const UserNameMaxLength = 20
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id               int            `json:"id"`
-	Username         string         `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password         string         `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	OriginalPassword string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName      string         `json:"display_name" gorm:"index" validate:"max=20"`
-	Role             int            `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status           int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email            string         `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId         string         `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId        string         `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId           string         `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId         string         `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId       string         `json:"telegram_id" gorm:"column:telegram_id;index"`
-	VerificationCode string         `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
-	AccessToken      *string        `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota            int            `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota        int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount     int            `json:"request_count" gorm:"type:int;default:0;"`               // request number
-	Group            string         `json:"group" gorm:"type:varchar(64);default:'default'"`
-	AffCode          string         `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	AffCount         int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota         int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota  int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	DeletedAt        gorm.DeletedAt `gorm:"index"`
-	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
-	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	CreatedAt        int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
-	LastLoginAt      int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	Id                int            `json:"id"`
+	Username          string         `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password          string         `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	OriginalPassword  string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName       string         `json:"display_name" gorm:"index" validate:"max=20"`
+	Role              int            `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status            int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email             string         `json:"email" gorm:"index" validate:"max=50"`
+	GitHubId          string         `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId         string         `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId            string         `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId          string         `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId        string         `json:"telegram_id" gorm:"column:telegram_id;index"`
+	VerificationCode  string         `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
+	AccessToken       *string        `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	Quota             int            `json:"quota" gorm:"type:int;default:0"`
+	UsedQuota         int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
+	RequestCount      int            `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Group             string         `json:"group" gorm:"type:varchar(64);default:'default'"`
+	AffCode           string         `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	AffCount          int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
+	AffQuota          int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota   int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	InviterId         int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	DeletedAt         gorm.DeletedAt `gorm:"index"`
+	LinuxDOId         string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting           string         `json:"setting" gorm:"type:text;column:setting"`
+	Remark            string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	StripeCustomer    string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	CreatedAt         int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	LastLoginAt       int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	ExternalAccountId *string        `json:"external_account_id,omitempty" gorm:"type:varchar(128);column:external_account_id;uniqueIndex"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -303,6 +304,20 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 		err = DB.First(&user, "id = ?", id).Error
 	} else {
 		err = DB.Omit("password").First(&user, "id = ?", id).Error
+	}
+	return &user, err
+}
+
+func GetUserByExternalAccountId(externalAccountId string, selectAll bool) (*User, error) {
+	if strings.TrimSpace(externalAccountId) == "" {
+		return nil, errors.New("external account id is empty")
+	}
+	user := User{}
+	var err error
+	if selectAll {
+		err = DB.First(&user, "external_account_id = ?", externalAccountId).Error
+	} else {
+		err = DB.Omit("password").First(&user, "external_account_id = ?", externalAccountId).Error
 	}
 	return &user, err
 }
@@ -940,6 +955,33 @@ func decreaseUserQuota(id int, quota int) (err error) {
 		return err
 	}
 	return err
+}
+
+// TryPreConsumeUserQuota atomically reserves quota only if the balance can cover it.
+// [slim fork] 关闭并发越扣竞态:把 "读缓存→判断→异步扣减" 那段非原子序列,
+// 塌缩成一条带谓词的 UPDATE。DB 行锁串行化 quota>=? 判断与扣减,N 路齐发也只放过够付的那几发,
+// RowsAffected==0 即余额不足。只用于预扣门(admission),不可用于结算(钱已花,结算必须落账)。
+func TryPreConsumeUserQuota(id int, quota int) (ok bool, err error) {
+	if quota < 0 {
+		return false, errors.New("quota 不能为负数！")
+	}
+	if quota == 0 {
+		return true, nil
+	}
+	res := DB.Model(&User{}).Where("id = ? AND quota >= ?", id, quota).Update("quota", gorm.Expr("quota - ?", quota))
+	if res.Error != nil {
+		return false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return false, nil // 余额不足,拒绝
+	}
+	// 镜像到缓存,保持热路径读一致(仅成功预留后)
+	gopool.Go(func() {
+		if cerr := cacheDecrUserQuota(id, int64(quota)); cerr != nil {
+			common.SysLog("failed to mirror reserve to cache: " + cerr.Error())
+		}
+	})
+	return true, nil
 }
 
 func DeltaUpdateUserQuota(id int, delta int) (err error) {

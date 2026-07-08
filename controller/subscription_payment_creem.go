@@ -21,6 +21,9 @@ type SubscriptionCreemPayRequest struct {
 }
 
 func SubscriptionRequestCreemPay(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}

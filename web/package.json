@@ -1,5 +1,5 @@
 {
-  "name": "new-api-web-workspace",
+  "name": "alice-ai-gateway-web-workspace",
   "private": true,
   "workspaces": [
     "default",

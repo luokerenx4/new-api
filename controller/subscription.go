@@ -29,6 +29,10 @@ type SubscriptionBalancePayRequest struct {
 // ---- User APIs ----
 
 func GetSubscriptionPlans(c *gin.Context) {
+	if common.OpenAliceManagedMode {
+		common.ApiSuccess(c, []SubscriptionPlanDTO{})
+		return
+	}
 	if !operation_setting.IsPaymentComplianceConfirmed() {
 		common.ApiSuccess(c, []SubscriptionPlanDTO{})
 		return
@@ -98,6 +102,9 @@ func UpdateSubscriptionPreference(c *gin.Context) {
 }
 
 func SubscriptionRequestBalancePay(c *gin.Context) {
+	if !requireStandaloneConsumerSelfService(c) {
+		return
+	}
 	if !requirePaymentCompliance(c) {
 		return
 	}

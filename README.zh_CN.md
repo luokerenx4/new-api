@@ -1,480 +1,136 @@
 <div align="center">
 
-![new-api](/web/default/public/logo.png)
+![Alice AI Gateway](/web/default/public/logo.png)
 
-# New API
+# Alice AI Gateway
 
-🍥 **新一代大模型网关与AI资产管理系统**
-
-<p align="center">
-  简体中文 |
-  <a href="./README.zh_TW.md">繁體中文</a> |
-  <a href="./README.md">English</a> |
-  <a href="./README.fr.md">Français</a> |
-  <a href="./README.ja.md">日本語</a>
-</p>
-
-<p align="center">
-  <a href="https://raw.githubusercontent.com/Calcium-Ion/new-api/main/LICENSE">
-    <img src="https://img.shields.io/github/license/Calcium-Ion/new-api?color=brightgreen" alt="license">
-  </a><!--
-  --><a href="https://github.com/Calcium-Ion/new-api/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Calcium-Ion/new-api?color=brightgreen&include_prereleases" alt="release">
-  </a><!--
-  --><a href="https://hub.docker.com/r/CalciumIon/new-api">
-    <img src="https://img.shields.io/badge/docker-dockerHub-blue" alt="docker">
-  </a><!--
-  --><a href="https://goreportcard.com/report/github.com/Calcium-Ion/new-api">
-    <img src="https://goreportcard.com/badge/github.com/Calcium-Ion/new-api" alt="GoReportCard">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/20180" target="_blank">
-    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
-  </a>
-  <br>
-  <a href="https://hellogithub.com/repository/QuantumNous/new-api" target="_blank">
-    <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
-  </a><!--
-  --><a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="New API - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="#-快速开始">快速开始</a> •
-  <a href="#-主要特性">主要特性</a> •
-  <a href="#-部署">部署</a> •
-  <a href="#-文档">文档</a> •
-  <a href="#-帮助支持">帮助</a>
-</p>
+**OpenAlice 托管的 AI 网关数据面，基于 New API。**
 
 </div>
 
-## 📝 项目说明
+## 项目定位
 
-> [!IMPORTANT]
-> - 本项目仅面向合法授权的 AI API 网关、组织内部鉴权、多模型管理、用量统计、成本核算和私有化部署场景。
-> - 使用者必须合法取得上游 API Key、账号、模型服务或接口权限，并遵守上游服务条款及适用法律法规。
-> - 使用者应确保其使用方式符合上游服务条款及适用法律法规。
-> - 面向公众提供生成式人工智能服务时，使用者应遵守[《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm)等监管要求，自行完成所在司法辖区要求的备案、许可、内容安全、实名、日志留存、税务和上游授权等合规义务。
+Alice AI Gateway 是 OpenAlice 的 AI 执行网关。它应该作为 OpenAlice Cloud
+后面的独立数据面服务部署，而不是作为独立面向消费者的 SaaS 或公开自助计费门户。
 
----
+在 OpenAlice 的部署结构里：
 
-## 🤝 我们信任的合作伙伴
+- **OpenAlice Cloud** 负责账户、登录、订阅、权益、计费、激活和后台运营。
+- **Alice AI Gateway** 负责模型路由、上游 provider 凭据、请求转发、token 级额度执行和用量统计。
+- **OpenAlice 客户端** 使用 OpenAlice Cloud 发放的 managed AI credential，直接调用这个 gateway endpoint。
+- 核心商业权限变更来自外部调度者，目前就是 OpenAlice Cloud。Gateway 应该把 Cloud 下发的 grant、发卡、冻结、吊销和额度操作视为 OpenAlice 托管用户的事实来源。
 
-<p align="center">
-  <em>排名不分先后</em>
-</p>
+这个边界让私有的 OpenAlice Cloud 账户系统不进入 AGPL 仓库，同时让 AI gateway 的执行实现保持开源、可审计。
 
-<p align="center">
-  <a href="https://www.cherry-ai.com/" target="_blank">
-    <img src="./docs/images/cherry-studio.png" alt="Cherry Studio" height="80" />
-  </a><!--
-  --><a href="https://github.com/iOfficeAI/AionUi/" target="_blank">
-    <img src="./docs/images/aionui.png" alt="Aion UI" height="80" />
-  </a><!--
-  --><a href="https://bda.pku.edu.cn/" target="_blank">
-    <img src="./docs/images/pku.png" alt="北京大学" height="80" />
-  </a><!--
-  --><a href="https://www.compshare.cn/?ytag=GPU_yy_gh_newapi" target="_blank">
-    <img src="./docs/images/ucloud.png" alt="UCloud 优刻得" height="80" />
-  </a><!--
-  --><a href="https://www.aliyun.com/" target="_blank">
-    <img src="./docs/images/aliyun.png" alt="阿里云" height="80" />
-  </a><!--
-  --><a href="https://io.net/" target="_blank">
-    <img src="./docs/images/io-net.png" alt="IO.NET" height="80" />
-  </a>
-</p>
+## OpenAlice 边界
 
----
+Alice AI Gateway 应作为受 OpenAlice Cloud 控制的封闭执行面运行：
 
-## 🙏 特别鸣谢
+- 不要把 OpenAlice Cloud secrets、Stripe secrets、客户计费逻辑或私有账户权益代码放进这个仓库。
+- 优先提供窄的内部 provisioning API、后台自动化或数据库支撑的操作，让 OpenAlice Cloud 用显式 service credential 调用。
+- 内置的面向终端用户充值、订阅和 checkout 页面不是 OpenAlice 产品的事实来源。需要时可以禁用、隐藏，或仅作为内部维护工具保留。
+- Gateway API key 是执行凭据。产品层面的归属、生命周期和付费访问权限属于 OpenAlice Cloud。
 
-<p align="center">
-  <a href="https://www.jetbrains.com/?from=new-api" target="_blank">
-    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" alt="JetBrains Logo" width="120" />
-  </a>
-</p>
+## 这个服务仍然负责什么
 
-<p align="center">
-  <strong>感谢 <a href="https://www.jetbrains.com/?from=new-api">JetBrains</a> 为本项目提供免费的开源开发许可证</strong>
-</p>
+Alice AI Gateway 仍然是完整的 AI gateway/proxy：
 
----
+- 继承自 New API 的 OpenAI-compatible、Claude-compatible、Gemini-compatible 等 relay surface。
+- 多 provider channel 管理和模型路由。
+- token 级限额、分组、模型限制和请求计量。
+- 对 Cloud 发放的 managed AI credential 执行额度。
+- 为 OpenAlice Cloud 对账所需的运营日志和 usage 数据。
 
-## 🚀 快速开始
+## 部署草图
 
-### 使用 Docker Compose（推荐）
+本地 Docker Compose：
 
 ```bash
-# 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 编辑 docker-compose.yml 配置
-nano docker-compose.yml
-
-# 启动服务
-docker-compose up -d
+docker compose up -d
 ```
 
-<details>
-<summary><strong>使用 Docker 命令</strong></summary>
+本地构建镜像：
 
 ```bash
-# 拉取最新镜像
-docker pull calciumion/new-api:latest
+docker build -t alice-ai-gateway:latest .
+```
 
-# 使用 SQLite（默认）
-docker run --name new-api -d --restart always \
+用 SQLite 跑独立容器：
+
+```bash
+docker run --name alice-ai-gateway -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
-
-# 使用 MySQL
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
+  alice-ai-gateway:latest
 ```
 
-> **💡 提示：** `-v ./data:/data` 会将数据保存在当前目录的 `data` 文件夹中，你也可以改为绝对路径如 `-v /your/custom/path:/data`
+生产环境中，gateway 应作为独立服务运行，使用专用数据库、专用 Redis、内部 admin/service credential，以及 OpenAlice 客户端访问的公开 HTTPS endpoint。
 
-</details>
-
----
-
-🎉 部署完成后，访问 `http://localhost:3000` 即可使用！
-
-> [!WARNING]
-> 将本项目作为面向公众的生成式 AI 服务或 API 转售服务运营时，使用者应先完成备案、内容安全、实名、日志留存、税务、支付和上游授权等合规义务。
-
-📖 更多部署方式请参考 [部署指南](https://docs.newapi.pro/zh/docs/installation)
-
----
-
-## 📚 文档
-
-<div align="center">
-
-### 📖 [官方文档](https://docs.newapi.pro/zh/docs) | [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/QuantumNous/new-api)
-
-</div>
-
-**快速导航：**
-
-| 分类 | 链接 |
-|------|------|
-| 🚀 部署指南 | [安装文档](https://docs.newapi.pro/zh/docs/installation) |
-| ⚙️ 环境配置 | [环境变量](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables) |
-| 📡 接口文档 | [API 文档](https://docs.newapi.pro/zh/docs/api) |
-| ❓ 常见问题 | [FAQ](https://docs.newapi.pro/zh/docs/support/faq) |
-| 💬 社区交流 | [交流渠道](https://docs.newapi.pro/zh/docs/support/community-interaction) |
-
----
-
-## ✨ 主要特性
-
-> 详细特性请参考 [特性说明](https://docs.newapi.pro/zh/docs/guide/wiki/basic-concepts/features-introduction)
-
-### 🎨 核心功能
-
-| 特性 | 说明 |
-|------|------|
-| 🎨 全新 UI | 现代化的用户界面设计 |
-| 🌍 多语言 | 支持中文、英文、法语、日语 |
-| 🔄 数据兼容 | 完全兼容原版 One API 数据库 |
-| 📈 数据看板 | 可视化控制台与统计分析 |
-| 🔒 权限管理 | 令牌分组、模型限制、用户管理 |
-
-### 💰 授权用量与成本管理
-
-- ✅ 合法授权场景下的内部充值与额度分配（易支付、Stripe）
-- ✅ 组织内按次、按量或缓存命中成本核算
-- ✅ 支持 OpenAI、Azure、DeepSeek、Claude、Qwen 等模型的缓存计费统计
-- ✅ 面向内部管理或企业客户的灵活计费策略配置
-
-### 🔐 授权与安全
-
-- 😈 Discord 授权登录
-- 🤖 LinuxDO 授权登录
-- 📱 Telegram 授权登录
-- 🔑 OIDC 统一认证
-- 🔍 Key 查询使用额度（配合 [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool)）
-
-### 🚀 高级功能
-
-**API 格式支持：**
-- ⚡ [OpenAI Responses](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/create-response)
-- ⚡ [OpenAI Realtime API](https://docs.newapi.pro/zh/docs/api/ai-model/realtime/create-realtime-session)（含 Azure）
-- ⚡ [Claude Messages](https://docs.newapi.pro/zh/docs/api/ai-model/chat/create-message)
-- ⚡ [Google Gemini](https://doc.newapi.pro/api/google-gemini-chat)
-- 🔄 [Rerank 模型](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/create-rerank)（Cohere、Jina）
-
-**智能路由：**
-- ⚖️ 渠道加权随机
-- 🔄 失败自动重试
-- 🚦 用户级别模型限流
-
-**格式转换：**
-- 🔄 **OpenAI Compatible ⇄ Claude Messages**
-- 🔄 **OpenAI Compatible → Google Gemini**
-- 🔄 **Google Gemini → OpenAI Compatible** - 仅支持文本，暂不支持函数调用
-- 🚧 **OpenAI Compatible ⇄ OpenAI Responses** - 开发中
-- 🔄 **思考转内容功能**
-
-**Reasoning Effort 支持：**
-
-<details>
-<summary>查看详细配置</summary>
-
-**OpenAI 系列模型：**
-- `o3-mini-high` - High reasoning effort
-- `o3-mini-medium` - Medium reasoning effort
-- `o3-mini-low` - Low reasoning effort
-- `gpt-5-high` - High reasoning effort
-- `gpt-5-medium` - Medium reasoning effort
-- `gpt-5-low` - Low reasoning effort
-
-**Claude 思考模型：**
-- `claude-3-7-sonnet-20250219-thinking` - 启用思考模式
-
-**Google Gemini 系列模型：**
-- `gemini-2.5-flash-thinking` - 启用思考模式
-- `gemini-2.5-flash-nothinking` - 禁用思考模式
-- `gemini-2.5-pro-thinking` - 启用思考模式
-- `gemini-2.5-pro-thinking-128` - 启用思考模式，并设置思考预算为128tokens
-- 也可以直接在 Gemini 模型名称后追加 `-low` / `-medium` / `-high` 来控制思考力度（无需再设置思考预算后缀）
-
-</details>
-
----
-
-## 🤖 模型支持
-
-> 详情请参考 [接口文档 - 网关接口](https://docs.newapi.pro/zh/docs/api)
-
-| 模型类型 | 说明 | 文档 |
-|---------|------|------|
-| 🤖 OpenAI-Compatible | OpenAI 兼容模型 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createchatcompletion) |
-| 🤖 OpenAI Responses | OpenAI Responses 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createresponse) |
-| 🎨 Midjourney-Proxy | [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) | [文档](https://doc.newapi.pro/api/midjourney-proxy-image) |
-| 🎵 Suno-API | [Suno API](https://github.com/Suno-API/Suno-API) | [文档](https://doc.newapi.pro/api/suno-music) |
-| 🔄 Rerank | Cohere、Jina | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/create-rerank) |
-| 💬 Claude | Messages 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/createmessage) |
-| 🌐 Gemini | Google Gemini 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/gemini/geminirelayv1beta) |
-| 🔧 Dify | ChatFlow 模式 | - |
-| 🎯 自定义上游 | 支持配置合法授权的上游接口地址 | - |
-
-### 📡 支持的接口
-
-<details>
-<summary>查看完整接口列表</summary>
-
-- [聊天接口 (Chat Completions)](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createchatcompletion)
-- [响应接口 (Responses)](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createresponse)
-- [图像接口 (Image)](https://docs.newapi.pro/zh/docs/api/ai-model/images/openai/post-v1-images-generations)
-- [音频接口 (Audio)](https://docs.newapi.pro/zh/docs/api/ai-model/audio/openai/create-transcription)
-- [视频接口 (Video)](https://docs.newapi.pro/zh/docs/api/ai-model/audio/openai/createspeech)
-- [嵌入接口 (Embeddings)](https://docs.newapi.pro/zh/docs/api/ai-model/embeddings/createembedding)
-- [重排序接口 (Rerank)](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/creatererank)
-- [实时对话 (Realtime)](https://docs.newapi.pro/zh/docs/api/ai-model/realtime/createrealtimesession)
-- [Claude 聊天](https://docs.newapi.pro/zh/docs/api/ai-model/chat/createmessage)
-- [Google Gemini 聊天](https://docs.newapi.pro/zh/docs/api/ai-model/chat/gemini/geminirelayv1beta)
-
-</details>
-
----
-
-## 🚢 部署
-
-> [!TIP]
-> **最新版 Docker 镜像：** `calciumion/new-api:latest`
-
-### 📋 部署要求
-
-| 组件 | 要求 |
-|------|------|
-| **本地数据库** | SQLite（Docker 需挂载 `/data` 目录）|
-| **远程数据库** | MySQL ≥ 5.7.8 或 PostgreSQL ≥ 9.6 |
-| **容器引擎** | Docker / Docker Compose |
-
-### ⚙️ 环境变量配置
-
-<details>
-<summary>常用环境变量配置</summary>
-
-| 变量名 | 说明                                                           | 默认值 |
-|--------|--------------------------------------------------------------|--------|
-| `SESSION_SECRET` | 会话密钥（多机部署必须）                                                 | - |
-| `CRYPTO_SECRET` | 加密密钥（Redis 必须）                                               | - |
-| `SQL_DSN` | 数据库连接字符串                                                     | - |
-| `REDIS_CONN_STRING` | Redis 连接字符串                                                  | - |
-| `STREAMING_TIMEOUT` | 流式超时时间（秒）                                                    | `300` |
-| `STREAM_SCANNER_MAX_BUFFER_MB` | 流式扫描器单行最大缓冲（MB），图像生成等超大 `data:` 片段（如 4K 图片 base64）需适当调大 | `64` |
-| `MAX_REQUEST_BODY_MB` | 请求体最大大小（MB，**解压后**计；防止超大请求/zip bomb 导致内存暴涨），超过将返回 `413` | `32` |
-| `AZURE_DEFAULT_API_VERSION` | Azure API 版本                                                 | `2025-04-01-preview` |
-| `ERROR_LOG_ENABLED` | 错误日志开关                                                       | `false` |
-| `PYROSCOPE_URL` | Pyroscope 服务地址                                            | - |
-| `PYROSCOPE_APP_NAME` | Pyroscope 应用名                                        | `new-api` |
-| `PYROSCOPE_BASIC_AUTH_USER` | Pyroscope Basic Auth 用户名                        | - |
-| `PYROSCOPE_BASIC_AUTH_PASSWORD` | Pyroscope Basic Auth 密码                  | - |
-| `PYROSCOPE_MUTEX_RATE` | Pyroscope mutex 采样率                               | `5` |
-| `PYROSCOPE_BLOCK_RATE` | Pyroscope block 采样率                               | `5` |
-| `HOSTNAME` | Pyroscope 标签里的主机名                                          | `new-api` |
-
-📖 **完整配置：** [环境变量文档](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables)
-
-</details>
-
-### 🔧 部署方式
-
-<details>
-<summary><strong>方式 1：Docker Compose（推荐）</strong></summary>
+OpenAlice 生产环境应设置：
 
 ```bash
-# 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 编辑配置
-nano docker-compose.yml
-
-# 启动服务
-docker-compose up -d
+OPENALICE_MANAGED_MODE=true
 ```
 
-</details>
+managed mode 会禁用消费者自助注册、充值和订阅购买入口。operator 登录、admin API、gateway token、额度执行和对账数据仍然可用。
 
-<details>
-<summary><strong>方式 2：Docker 命令</strong></summary>
+如果要让 OpenAlice Cloud 创建账户和发卡，需要设置一个足够长的随机 service secret：
 
-**使用 SQLite：**
 ```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
+OPENALICE_PROVISIONING_TOKEN=...
 ```
 
-**使用 MySQL：**
+Cloud 调用 `/api/openalice/provisioning/*` 时使用
+`Authorization: Bearer <token>` 或 `X-OpenAlice-Provisioning-Token: <token>`。
+这个变量为空时 provisioning API 默认禁用。
+
+## 开发
+
+后端：
+
 ```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
+go test ./...
+go build -o alice-ai-gateway
 ```
 
-> **💡 路径说明：**
-> - `./data:/data` - 相对路径，数据保存在当前目录的 data 文件夹
-> - 也可使用绝对路径，如：`/your/custom/path:/data`
+前端：
 
-</details>
+```bash
+cd web/default
+bun install
+bun run build
+```
 
-<details>
-<summary><strong>方式 3：宝塔面板</strong></summary>
+Go module path 目前仍保留为 `github.com/QuantumNous/new-api`，避免高风险 import path
+大规模重写。公开服务名、Docker 命名和 OpenAlice 文档使用 `alice-ai-gateway`。
 
-1. 安装宝塔面板（≥ 9.2.0 版本）
-2. 在应用商店搜索 **New-API**
-3. 一键安装
+## OpenAlice 改造笔记
 
-📖 [图文教程](./docs/installation/BT.md)
+第一阶段 OpenAlice 改造目标是账户和额度边界：
 
-</details>
+- 把 OpenAlice Cloud 视为权威账户和权益系统。
+- 增加或暴露窄的 provisioning boundary，用于创建 gateway 用户、签发 token、充值额度、冻结 token、吊销 token，以及拉取对账快照。
+- 面向用户的充值/订阅流程不要放进 OpenAlice 产品路径，除非明确改造成内部运营工具。
+- 使用 `OPENALICE_MANAGED_MODE=true` 关闭消费者自助账户和计费入口，同时保留 operator 与执行面能力。
+- 设置 `OPENALICE_PROVISIONING_TOKEN` 来启用 Cloud-facing 的
+  `/api/openalice/provisioning/*` service boundary。
+- 保留请求级额度安全。原子额度准入、清晰的 settle/refund 行为比 UI 便利更重要。
 
-### ⚠️ 多机部署注意事项
+当前 user/token/quota 结构和下一步 provisioning boundary 见
+[OpenAlice 账户适配笔记](./docs/openalice-account-adaptation.md)。
 
-> [!WARNING]
-> - **必须设置** `SESSION_SECRET` - 否则登录状态不一致
-> - **公用 Redis 必须设置** `CRYPTO_SECRET` - 否则数据无法解密
+## 上游归属与许可证
 
-### 🔄 渠道重试与缓存
+Alice AI Gateway 是 [New API](https://github.com/QuantumNous/new-api) 的修改分发版本。
+New API 使用 [GNU Affero General Public License v3.0](./LICENSE) 授权。
 
-**重试配置：** `设置 → 运营设置 → 通用设置 → 失败重试次数`
+AGPLv3 Section 7 的附加条款适用。修改版本必须在适当的法律声明，以及任何面向用户的显著 about、legal、footer 或 attribution 位置保留作者归属声明：
+`Frontend design and development by New API contributors.`
 
-**缓存配置：**
-- `REDIS_CONN_STRING`：Redis 缓存（推荐）
-- `MEMORY_CACHE_ENABLED`：内存缓存
+如果修改版本提供用户界面，也必须在显著 about、legal、footer 或 attribution 位置保留原项目链接：
+<https://github.com/QuantumNous/new-api>。
 
----
-
-## 🔗 相关项目
-
-### 上游项目
-
-| 项目 | 说明 |
-|------|------|
-| [One API](https://github.com/songquanpeng/one-api) | 原版项目基础 |
-| [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourney 接口支持 |
-
-### 配套工具
-
-| 项目 | 说明 |
-|------|------|
-| [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool) | Key 额度查询工具 |
-| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API 高性能优化版 |
-
----
-
-## 💬 帮助支持
-
-### 📖 文档资源
-
-| 资源 | 链接 |
-|------|------|
-| 📘 常见问题 | [FAQ](https://docs.newapi.pro/zh/docs/support/faq) |
-| 💬 社区交流 | [交流渠道](https://docs.newapi.pro/zh/docs/support/community-interaction) |
-| 🐛 反馈问题 | [问题反馈](https://docs.newapi.pro/zh/docs/support/feedback-issues) |
-| 📚 完整文档 | [官方文档](https://docs.newapi.pro/zh/docs) |
-
-### 🤝 贡献指南
-
-欢迎各种形式的贡献！
-
-- 🐛 报告 Bug
-- 💡 提出新功能
-- 📝 改进文档
-- 🔧 提交代码
-
----
-
-## 📜 许可证
-
-本项目采用 [GNU Affero 通用公共许可证 v3.0 (AGPLv3)](./LICENSE) 授权。
-
-本项目为开源项目，在 [One API](https://github.com/songquanpeng/one-api)（MIT 许可证）的基础上进行二次开发。
-
-如果您所在的组织政策不允许使用 AGPLv3 许可的软件，或您希望规避 AGPLv3 的开源义务，请发送邮件至：[support@quantumnous.com](mailto:support@quantumnous.com)
-
----
-
-## 🌟 Star History
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Calcium-Ion/new-api&type=Date)](https://star-history.com/#Calcium-Ion/new-api&Date)
-
-</div>
-
----
-
-<div align="center">
-
-### 💖 感谢使用 New API
-
-如果这个项目对你有帮助，欢迎给我们一个 ⭐️ Star！
-
-**[官方文档](https://docs.newapi.pro/zh/docs)** • **[问题反馈](https://github.com/Calcium-Ion/new-api/issues)** • **[最新发布](https://github.com/Calcium-Ion/new-api/releases)**
-
-<sub>Built with ❤️ by QuantumNous</sub>
-
-</div>
+New API 本身基于 [One API](https://github.com/songquanpeng/one-api)（MIT License）。
+归属和第三方许可证信息见 [NOTICE](./NOTICE) 和
+[THIRD-PARTY-LICENSES.md](./THIRD-PARTY-LICENSES.md)。
