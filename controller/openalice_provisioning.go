@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -525,6 +527,17 @@ func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
 		return
 	}
+	groupNames := openAliceProvisioningSortedGroupNames(req.Groups)
+	usableGroupsJSON, err := openAliceProvisioningMergedUsableGroupsJSON(groupNames)
+	if err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
+	groupRatioJSON, err := openAliceProvisioningMergedGroupRatioJSON(groupNames)
+	if err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -533,7 +546,13 @@ func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
 		"ModelRequestRateLimitEnabled":         strconv.FormatBool(enabled),
 		"ModelRequestRateLimitDurationMinutes": strconv.Itoa(req.WindowMinutes),
 		"ModelRequestRateLimitGroup":           groupsJSON,
+		"UserUsableGroups":                     usableGroupsJSON,
+		"GroupRatio":                           groupRatioJSON,
 	}); err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := openAliceProvisioningSyncManagedChannelGroups(groupNames); err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -583,6 +602,96 @@ func validOpenAliceProvisioningGroup(group string) bool {
 		return false
 	}
 	return true
+}
+
+func openAliceProvisioningSortedGroupNames(groups map[string][2]int) []string {
+	groupNames := make([]string, 0, len(groups))
+	for group := range groups {
+		group = strings.TrimSpace(group)
+		if group != "" {
+			groupNames = append(groupNames, group)
+		}
+	}
+	sort.Strings(groupNames)
+	return groupNames
+}
+
+func openAliceProvisioningMergedUsableGroupsJSON(groupNames []string) (string, error) {
+	usableGroups := map[string]string{}
+	raw := strings.TrimSpace(setting.UserUsableGroups2JSONString())
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &usableGroups); err != nil {
+			return "", err
+		}
+	}
+	for _, group := range groupNames {
+		if _, ok := usableGroups[group]; !ok {
+			usableGroups[group] = "OpenAlice managed " + group
+		}
+	}
+	data, err := json.Marshal(usableGroups)
+	return string(data), err
+}
+
+func openAliceProvisioningMergedGroupRatioJSON(groupNames []string) (string, error) {
+	groupRatios := ratio_setting.GetGroupRatioCopy()
+	for _, group := range groupNames {
+		if _, ok := groupRatios[group]; !ok {
+			groupRatios[group] = 1
+		}
+	}
+	data, err := json.Marshal(groupRatios)
+	return string(data), err
+}
+
+func openAliceProvisioningSyncManagedChannelGroups(groupNames []string) error {
+	if !common.OpenAliceManagedMode || len(groupNames) == 0 {
+		return nil
+	}
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var channels []model.Channel
+		if err := tx.Find(&channels).Error; err != nil {
+			return err
+		}
+		for _, channel := range channels {
+			merged := openAliceProvisioningMergeGroupCSV(channel.Group, groupNames)
+			channel.Group = merged
+			if err := tx.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("group", merged).Error; err != nil {
+				return err
+			}
+			if err := channel.UpdateAbilities(tx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	model.InitChannelCache()
+	return nil
+}
+
+func openAliceProvisioningMergeGroupCSV(existing string, groupNames []string) string {
+	seen := map[string]bool{}
+	merged := make([]string, 0, len(groupNames)+1)
+	for _, group := range strings.Split(existing, ",") {
+		group = strings.TrimSpace(group)
+		if group == "" || seen[group] {
+			continue
+		}
+		seen[group] = true
+		merged = append(merged, group)
+	}
+	for _, group := range groupNames {
+		group = strings.TrimSpace(group)
+		if group == "" || seen[group] {
+			continue
+		}
+		seen[group] = true
+		merged = append(merged, group)
+	}
+	return strings.Join(merged, ",")
 }
 
 func OpenAliceProvisioningTokenIdParam(c *gin.Context) {
