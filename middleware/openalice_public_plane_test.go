@@ -24,9 +24,10 @@ func TestOpenAlicePublicDataPlaneOnlyBlocksControlRoutesOnPublicHost(t *testing.
 	t.Setenv("OPENALICE_CONTROL_PLANE_HOSTS", "alice-ai-gateway-staging.railway.internal")
 	router := openAlicePublicDataPlaneTestRouter()
 
-	recorder := performOpenAlicePublicDataPlaneRequest(router, "alpha-gateway.wond.dev", "/api/openalice/provisioning/ping")
-
-	require.Equal(t, http.StatusNotFound, recorder.Code)
+	for _, path := range []string{"/api/openalice/provisioning/ping", "/api/channel"} {
+		recorder := performOpenAlicePublicDataPlaneRequest(router, "alpha-gateway.wond.dev", path)
+		require.Equal(t, http.StatusNotFound, recorder.Code, path)
+	}
 }
 
 func TestOpenAlicePublicDataPlaneOnlyAllowsRelayAndStatusOnPublicHost(t *testing.T) {

@@ -119,6 +119,11 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 - Avoid hand-written assertion helpers unless they encode a reusable project-specific invariant.
 - When cleaning tests, preserve meaningful regression coverage. If a deleted test covered a real contract indirectly, replace it with a smaller test that asserts that contract directly.
 
+**Router and deployment checks:** Changes to Gin route registration must be checked before a staging deploy.
+
+- Run `go test ./router` so `TestSetAPIRouterRegistersWithoutConflictingPaths` constructs the complete API router and catches duplicate Gin registrations.
+- Start the Gateway locally against a disposable local database before staging when changing route registration, middleware ordering, or startup wiring. A successful package build or a narrow helper test is not a substitute for full router assembly.
+
 ### Frontend Rules
 
 - Use `bun` as the preferred package manager and script runner for the frontend (`web/default/`):

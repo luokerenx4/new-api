@@ -1,6 +1,8 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 
@@ -228,7 +230,7 @@ func SetApiRouter(router *gin.Engine) {
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
 		{
-			channelRoute.GET("/", controller.GetAllChannels)
+			collectionRoute(channelRoute, http.MethodGet, controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
 			channelRoute.GET("/models", controller.ChannelListModels)
 			channelRoute.GET("/models_enabled", controller.EnabledListModels)
@@ -239,8 +241,8 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/test/:id", controller.TestChannel)
 			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
-			channelRoute.POST("/", controller.AddChannel)
-			channelRoute.PUT("/", controller.UpdateChannel)
+			collectionRoute(channelRoute, http.MethodPost, controller.AddChannel)
+			collectionRoute(channelRoute, http.MethodPut, controller.UpdateChannel)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
 			channelRoute.POST("/tag/disabled", controller.DisableTagChannels)
 			channelRoute.POST("/tag/enabled", controller.EnableTagChannels)
@@ -340,7 +342,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		dataRoute := apiRouter.Group("/data")
-		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
+		collectionRoute(dataRoute, http.MethodGet, middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
 		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
@@ -353,15 +355,15 @@ func SetApiRouter(router *gin.Engine) {
 		groupRoute := apiRouter.Group("/group")
 		groupRoute.Use(middleware.AdminAuth())
 		{
-			groupRoute.GET("/", controller.GetGroups)
+			collectionRoute(groupRoute, http.MethodGet, controller.GetGroups)
 		}
 
 		prefillGroupRoute := apiRouter.Group("/prefill_group")
 		prefillGroupRoute.Use(middleware.AdminAuth())
 		{
-			prefillGroupRoute.GET("/", controller.GetPrefillGroups)
-			prefillGroupRoute.POST("/", controller.CreatePrefillGroup)
-			prefillGroupRoute.PUT("/", controller.UpdatePrefillGroup)
+			collectionRoute(prefillGroupRoute, http.MethodGet, controller.GetPrefillGroups)
+			collectionRoute(prefillGroupRoute, http.MethodPost, controller.CreatePrefillGroup)
+			collectionRoute(prefillGroupRoute, http.MethodPut, controller.UpdatePrefillGroup)
 			prefillGroupRoute.DELETE("/:id", controller.DeletePrefillGroup)
 		}
 
@@ -426,4 +428,9 @@ func SetApiRouter(router *gin.Engine) {
 			deploymentsRoute.DELETE("/:id", controller.DeleteDeployment)
 		}
 	}
+}
+
+func collectionRoute(route *gin.RouterGroup, method string, handlers ...gin.HandlerFunc) {
+	route.Handle(method, "", handlers...)
+	route.Handle(method, "/", handlers...)
 }
