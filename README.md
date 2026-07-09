@@ -108,6 +108,22 @@ The provisioning API is disabled when this variable is empty.
 OpenAlice Cloud uses this private boundary for managed account/token work and
 for operator-owned rate-limit policy sync.
 
+For public Gateway hostnames, restrict the exposed surface to model/data-plane
+routes while keeping dashboard, admin, and provisioning on private/control
+hostnames:
+
+```bash
+OPENALICE_CONTROL_PLANE_HOSTS=alice-ai-gateway-staging.railway.internal
+OPENALICE_PUBLIC_DATA_PLANE_HOSTS=alpha-gateway.wond.dev
+```
+
+Requests whose `Host` matches `OPENALICE_CONTROL_PLANE_HOSTS` can access the
+full operator surface. Other hosts, including `OPENALICE_PUBLIC_DATA_PLANE_HOSTS`
+and accidental provider-generated domains, can only access relay routes such as
+`/v1/*`, `/v1beta/*`, `/mj/*`, `/suno/*`, and `/api/status`. Account, admin,
+setup, and `/api/openalice/provisioning/*` routes remain reachable only through
+private/internal hostnames.
+
 ## Development
 
 Backend:
