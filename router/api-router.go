@@ -316,10 +316,10 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
 		logRoute := apiRouter.Group("/log")
-		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
+		collectionRoute(logRoute, http.MethodGet, middleware.AdminAuth(), controller.GetAllLogs)
 		// Legacy synchronous direct-delete route used only by the classic frontend.
 		// TODO: remove once the classic frontend is removed; the default frontend uses /system-task/log-cleanup.
-		logRoute.DELETE("/", middleware.RootAuth(), controller.DeleteHistoryLogs)
+		collectionRoute(logRoute, http.MethodDelete, middleware.RootAuth(), controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
@@ -369,12 +369,12 @@ func SetApiRouter(router *gin.Engine) {
 
 		mjRoute := apiRouter.Group("/mj")
 		mjRoute.GET("/self", middleware.UserAuth(), controller.GetUserMidjourney)
-		mjRoute.GET("/", middleware.AdminAuth(), controller.GetAllMidjourney)
+		collectionRoute(mjRoute, http.MethodGet, middleware.AdminAuth(), controller.GetAllMidjourney)
 
 		taskRoute := apiRouter.Group("/task")
 		{
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
-			taskRoute.GET("/", middleware.AdminAuth(), controller.GetAllTask)
+			collectionRoute(taskRoute, http.MethodGet, middleware.AdminAuth(), controller.GetAllTask)
 		}
 
 		vendorRoute := apiRouter.Group("/vendors")

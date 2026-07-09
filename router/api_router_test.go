@@ -47,6 +47,14 @@ func TestSetAPIRouterRegistersWithoutConflictingPaths(t *testing.T) {
 		http.MethodPost + " /api/channel/",
 		http.MethodGet + " /api/data",
 		http.MethodGet + " /api/data/",
+		http.MethodGet + " /api/log",
+		http.MethodGet + " /api/log/",
+		http.MethodDelete + " /api/log",
+		http.MethodDelete + " /api/log/",
+		http.MethodGet + " /api/mj",
+		http.MethodGet + " /api/mj/",
+		http.MethodGet + " /api/task",
+		http.MethodGet + " /api/task/",
 	} {
 		_, ok := routes[route]
 		require.True(t, ok, "missing route %s", route)
