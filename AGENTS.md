@@ -6,6 +6,14 @@ Alice AI Gateway is the OpenAlice-operated AI gateway data plane based on New AP
 
 In the OpenAlice deployment, this repository is not the standalone consumer SaaS. OpenAlice Cloud owns the commercial account system, subscriptions, entitlements, staff operations, and product activation. Alice AI Gateway owns execution: upstream provider credentials, model routing, Cloud-issued execution tokens, token-level quota enforcement, relay behavior, and usage records that can be reconciled back to OpenAlice Cloud.
 
+When checked out under `/Users/ame/2607gateway`, this is a first-party child of
+the same OpenAlice engineering workspace. The separate `slim` Git history and
+AGPL/upstream boundary do not make the Gateway external or read-only. Agents may
+modify and commit Gateway work here while preserving the license and attribution
+rules below; push the Gateway commit before updating the outer stack submodule
+pointer. Cross-service ownership and commit order live in the outer
+`docs/project-structure.md`.
+
 ## OpenAlice Service Boundary
 
 - Treat OpenAlice Cloud as the external orchestrator and source of truth for OpenAlice-managed accounts.

@@ -163,8 +163,8 @@ The first OpenAlice-specific adaptation target is the account and quota boundary
   settle/refund behavior matter more than UI convenience.
 
 See [OpenAlice Account Adaptation Notes](./docs/openalice-account-adaptation.md)
-for the current user/token/quota structure and the provisioning boundary we
-intend to build next.
+for the current user/token/quota structure and the implemented provisioning
+boundary operated by OpenAlice Cloud.
 
 ## Upstream Attribution And License
 
