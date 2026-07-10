@@ -123,6 +123,8 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 
 - Run `go test ./router` so `TestSetAPIRouterRegistersWithoutConflictingPaths` constructs the complete API router and catches duplicate Gin registrations.
 - Start the Gateway locally against a disposable local database before staging when changing route registration, middleware ordering, or startup wiring. A successful package build or a narrow helper test is not a substitute for full router assembly.
+- Run `scripts/smoke-openalice-plane-boundary.sh` when changing route paths, host allowlists, managed-mode middleware, or public/private plane behavior. The smoke must prove public control routes remain `404` and private collection routes exist in both slashless and trailing-slash forms.
+- Treat private HTTP `401`/`403`, or the legacy HTTP `200` body with `"success":false`, as evidence that a protected route exists. A private `404` for a dashboard collection request such as `/api/channel` is a route or host-boundary regression, not an authentication failure.
 
 ### Frontend Rules
 

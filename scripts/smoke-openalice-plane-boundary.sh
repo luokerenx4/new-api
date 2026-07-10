@@ -135,6 +135,12 @@ const cases = [
     want: 404,
   },
   {
+    name: 'public slashless admin channel api blocked',
+    host: 'alpha-gateway.wond.dev',
+    path: '/api/channel',
+    want: 404,
+  },
+  {
     name: 'public token management api blocked',
     host: 'alpha-gateway.wond.dev',
     path: '/api/token/',
@@ -208,6 +214,20 @@ const cases = [
     body: { operation_id: 'e2e-control-allow', external_account_id: 'acct_control', group: 'free' },
     want: 200,
   },
+  {
+    name: 'control slashless channel route requires operator auth',
+    host: 'control.localhost',
+    path: '/api/channel',
+    want: 200,
+    bodyIncludes: '"success":false',
+  },
+  {
+    name: 'control trailing-slash channel route requires operator auth',
+    host: 'control.localhost',
+    path: '/api/channel/',
+    want: 200,
+    bodyIncludes: '"success":false',
+  },
 ]
 
 for (const testCase of cases) {
@@ -216,6 +236,10 @@ for (const testCase of cases) {
   if (response.status !== testCase.want) {
     console.error(response.body.slice(0, 500))
     throw new Error(`${testCase.name}: got ${response.status}, want ${testCase.want}`)
+  }
+  if (testCase.bodyIncludes && !response.body.includes(testCase.bodyIncludes)) {
+    console.error(response.body.slice(0, 500))
+    throw new Error(`${testCase.name}: response body did not include ${testCase.bodyIncludes}`)
   }
 }
 
