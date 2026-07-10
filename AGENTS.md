@@ -21,6 +21,11 @@ pointer. Cross-service ownership and commit order live in the outer
 - Do not add OpenAlice Cloud secrets, Stripe secrets, customer billing authority, or private account entitlement logic to this AGPL repository.
 - Built-in recharge, subscription, and checkout flows are not the OpenAlice product source of truth. They may be disabled, hidden, or kept as internal operator tools when needed.
 - Preserve upstream New API attribution and license notices while using Alice AI Gateway as the OpenAlice service name.
+- Before changing groups, group ratios, channel group membership, model
+  availability, OpenAlice rate-limit provisioning, or plan-policy behavior,
+  read the outer stack guide `docs/gateway-managed-group-policy.md`. OpenAlice
+  uses group as a managed execution policy bundle, not as an inherited relay
+  credential-pool taxonomy.
 
 ## Tech Stack
 

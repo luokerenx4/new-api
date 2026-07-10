@@ -137,6 +137,11 @@ Possible later addition:
 - `POST /api/openalice/provisioning/rate-limits` writes Gateway's model request
   rate-limit option. Keep this endpoint private; it is an operator control-plane
   action initiated by OpenAlice Cloud, not a customer-facing setting.
+- In the standard stack checkout, follow the outer
+  `docs/gateway-managed-group-policy.md` for the OpenAlice meaning of groups and
+  the model/provider/plan onboarding procedure. The current endpoint also
+  projects submitted group names into usable groups, ratios, and channel
+  abilities; do not treat it as a rate-limit-only write.
 - Keep the existing atomic wallet pre-consume path. It is the correct admission
   pattern for concurrent quota use.
 - Token quota and user quota both matter today. If OpenAlice Cloud wants one
