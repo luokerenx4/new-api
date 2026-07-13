@@ -286,6 +286,7 @@ func SetApiRouter(router *gin.Engine) {
 		openAliceProvisioningRoute := apiRouter.Group("/openalice/provisioning")
 		openAliceProvisioningRoute.Use(middleware.OpenAliceProvisioningAuth())
 		{
+			openAliceProvisioningRoute.GET("/catalog", controller.OpenAliceProvisioningCatalog)
 			openAliceProvisioningRoute.POST("/users/upsert", controller.OpenAliceProvisioningUpsertUser)
 			openAliceProvisioningRoute.POST("/tokens", controller.OpenAliceProvisioningCreateToken)
 			openAliceProvisioningRoute.POST("/tokens/:id/quota", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningAdjustTokenQuota)

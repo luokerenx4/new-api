@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -128,6 +129,38 @@ func TestOpenAliceProvisioningCreatesUserTokenAndAuditsWithoutRawKey(t *testing.
 	require.Equal(t, model.ProvisioningOperationStatusSuccess, op.Status)
 	require.Contains(t, op.ResponsePayload, "key_preview")
 	require.False(t, strings.Contains(op.ResponsePayload, response.Data.Key))
+}
+
+func TestOpenAliceProvisioningTokenPayloadIncludesLastAccessTime(t *testing.T) {
+	payload := openAliceProvisioningTokenPayload(&model.Token{Id: 7, AccessedTime: 123456789}, false)
+	require.Equal(t, int64(123456789), payload.AccessedTime)
+}
+
+func TestOpenAliceManagedModelsProjectsPricingProtocolsAndMetadata(t *testing.T) {
+	cacheRatio := 0.02
+	models := openAliceManagedModels(
+		[]model.Pricing{{
+			ModelName: "LongCat-2.0", Description: "Agentic model", VendorID: 9,
+			ContextLength: 1048576, MaxOutputTokens: 131072,
+			QuotaType: 0, ModelRatio: 0.375, CompletionRatio: 3.9333333333, CacheRatio: &cacheRatio,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			EnableGroup:            []string{"starter", "pro"},
+		}},
+		[]model.PricingVendor{{ID: 9, Name: "Meituan LongCat"}},
+		map[string]common.EndpointInfo{"openai": {Method: http.MethodPost, Path: "/v1/chat/completions"}},
+	)
+	require.Len(t, models, 1)
+	managed := models[0]
+	require.Equal(t, "LongCat-2.0", managed.Id)
+	require.Equal(t, "Meituan LongCat", managed.Vendor)
+	require.Equal(t, int64(1048576), managed.ContextWindowTokens)
+	require.NotNil(t, managed.Price.InputUSDPerMillion)
+	require.InDelta(t, 0.75, *managed.Price.InputUSDPerMillion, 0.000001)
+	require.NotNil(t, managed.Price.OutputUSDPerMillion)
+	require.InDelta(t, 2.95, *managed.Price.OutputUSDPerMillion, 0.000001)
+	require.NotNil(t, managed.Price.CachedInputUSDPerMillion)
+	require.InDelta(t, 0.015, *managed.Price.CachedInputUSDPerMillion, 0.000001)
+	require.Equal(t, []openAliceManagedModelProtocol{{Id: "openai", Method: http.MethodPost, Path: "/v1/chat/completions"}}, managed.Protocols)
 }
 
 func TestOpenAliceProvisioningRejectsDuplicateOperationId(t *testing.T) {

@@ -90,9 +90,36 @@ type openAliceProvisioningTokenResponse struct {
 	RemainQuota        int    `json:"remain_quota"`
 	UsedQuota          int    `json:"used_quota"`
 	ExpiredTime        int64  `json:"expired_time"`
+	AccessedTime       int64  `json:"accessed_time"`
 	Group              string `json:"group"`
 	ModelLimitsEnabled bool   `json:"model_limits_enabled"`
 	ModelLimits        string `json:"model_limits"`
+}
+
+type openAliceManagedModelPrice struct {
+	Unit                     string   `json:"unit"`
+	InputUSDPerMillion       *float64 `json:"input_usd_per_million,omitempty"`
+	OutputUSDPerMillion      *float64 `json:"output_usd_per_million,omitempty"`
+	CachedInputUSDPerMillion *float64 `json:"cached_input_usd_per_million,omitempty"`
+	CacheWriteUSDPerMillion  *float64 `json:"cache_write_usd_per_million,omitempty"`
+	RequestUSD               *float64 `json:"request_usd,omitempty"`
+}
+
+type openAliceManagedModelProtocol struct {
+	Id     string `json:"id"`
+	Method string `json:"method"`
+	Path   string `json:"path"`
+}
+
+type openAliceManagedModel struct {
+	Id                  string                          `json:"id"`
+	Name                string                          `json:"name"`
+	Description         string                          `json:"description,omitempty"`
+	Vendor              string                          `json:"vendor,omitempty"`
+	ContextWindowTokens int64                           `json:"context_window_tokens,omitempty"`
+	MaxOutputTokens     int64                           `json:"max_output_tokens,omitempty"`
+	Price               openAliceManagedModelPrice      `json:"price"`
+	Protocols           []openAliceManagedModelProtocol `json:"protocols"`
 }
 
 func openAliceProvisioningUserPayload(user *model.User) openAliceProvisioningUserResponse {
@@ -126,6 +153,7 @@ func openAliceProvisioningTokenPayload(token *model.Token, includeKey bool) open
 		RemainQuota:        token.RemainQuota,
 		UsedQuota:          token.UsedQuota,
 		ExpiredTime:        token.ExpiredTime,
+		AccessedTime:       token.AccessedTime,
 		Group:              token.Group,
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
@@ -134,6 +162,66 @@ func openAliceProvisioningTokenPayload(token *model.Token, includeKey bool) open
 		payload.Key = token.GetFullKey()
 	}
 	return payload
+}
+
+func OpenAliceProvisioningCatalog(c *gin.Context) {
+	pricings := model.GetPricing()
+	models := openAliceManagedModels(pricings, model.GetVendors(), model.GetSupportedEndpointMap())
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"models": models}})
+}
+
+func openAliceManagedModels(pricings []model.Pricing, pricingVendors []model.PricingVendor, endpointMap map[string]common.EndpointInfo) []openAliceManagedModel {
+	vendors := map[int]string{}
+	for _, vendor := range pricingVendors {
+		vendors[vendor.ID] = vendor.Name
+	}
+	models := make([]openAliceManagedModel, 0, len(pricings))
+	for _, pricing := range pricings {
+		price := openAliceManagedModelPrice{Unit: "usd"}
+		if pricing.QuotaType == 1 {
+			value := pricing.ModelPrice
+			price.RequestUSD = &value
+		} else {
+			input := pricing.ModelRatio * 2
+			output := input * pricing.CompletionRatio
+			price.Unit = "usd_per_million_tokens"
+			price.InputUSDPerMillion = &input
+			price.OutputUSDPerMillion = &output
+			if pricing.CacheRatio != nil {
+				cached := input * *pricing.CacheRatio
+				price.CachedInputUSDPerMillion = &cached
+			}
+			if pricing.CreateCacheRatio != nil {
+				cacheWrite := input * *pricing.CreateCacheRatio
+				price.CacheWriteUSDPerMillion = &cacheWrite
+			}
+		}
+		protocols := make([]openAliceManagedModelProtocol, 0, len(pricing.SupportedEndpointTypes))
+		for _, endpointType := range pricing.SupportedEndpointTypes {
+			info, ok := endpointMap[string(endpointType)]
+			if !ok || strings.TrimSpace(info.Path) == "" {
+				continue
+			}
+			protocols = append(protocols, openAliceManagedModelProtocol{
+				Id:     string(endpointType),
+				Method: strings.ToUpper(common.GetStringIfEmpty(info.Method, http.MethodPost)),
+				Path:   info.Path,
+			})
+		}
+		sort.Slice(protocols, func(i, j int) bool { return protocols[i].Id < protocols[j].Id })
+		models = append(models, openAliceManagedModel{
+			Id:                  pricing.ModelName,
+			Name:                pricing.ModelName,
+			Description:         pricing.Description,
+			Vendor:              vendors[pricing.VendorID],
+			ContextWindowTokens: pricing.ContextLength,
+			MaxOutputTokens:     pricing.MaxOutputTokens,
+			Price:               price,
+			Protocols:           protocols,
+		})
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].Id < models[j].Id })
+	return models
 }
 
 func openAliceProvisioningRateLimitPolicyPayload() openAliceProvisioningRateLimitPolicyResponse {

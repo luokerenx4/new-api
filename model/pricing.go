@@ -18,6 +18,8 @@ import (
 type Pricing struct {
 	ModelName              string                  `json:"model_name"`
 	Description            string                  `json:"description,omitempty"`
+	ContextLength          int64                   `json:"context_length,omitempty"`
+	MaxOutputTokens        int64                   `json:"max_output_tokens,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   string                  `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
@@ -300,6 +302,8 @@ func updatePricing() {
 				continue
 			}
 			pricing.Description = meta.Description
+			pricing.ContextLength = meta.ContextLength
+			pricing.MaxOutputTokens = meta.MaxOutputTokens
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
