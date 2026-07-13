@@ -100,6 +100,7 @@ Current endpoints:
 - `POST /api/openalice/provisioning/tokens/:id/quota`
 - `POST /api/openalice/provisioning/tokens/:id/status`
 - `POST /api/openalice/provisioning/rate-limits`
+- `GET /api/openalice/provisioning/catalog`
 - `GET /api/openalice/provisioning/accounts/:external_account_id/snapshot`
 
 Every mutating request requires `operation_id`. Duplicate operation ids are
@@ -115,6 +116,8 @@ The intended long-term boundary is still narrow:
 - disable a user;
 - update the Gateway model request rate-limit policy from the Cloud admin plan
   matrix;
+- return a flat, read-only customer model catalog with pricing, protocol, and
+  structured context/output limits, without exposing groups or channels;
 - return reconciliation snapshots: user quota, token quota, used quota, request
   count, token status, and recent usage totals.
 

@@ -41,6 +41,8 @@ export interface Model {
   tags?: string
   vendor_id?: number
   endpoints?: string
+  context_length?: number
+  max_output_tokens?: number
   status: number
   sync_official: number
   created_time: number

@@ -93,6 +93,8 @@ const extendedModelFormSchema = z.object({
   tags: z.array(z.string()),
   vendor_id: z.number().optional(),
   endpoints: z.string(),
+  context_length: z.number().int().min(0),
+  max_output_tokens: z.number().int().min(0),
   name_rule: z.number(),
   status: z.boolean(),
   sync_official: z.boolean(),
@@ -232,6 +234,8 @@ export function ModelMutateDrawer({
       tags: [],
       vendor_id: undefined,
       endpoints: '',
+      context_length: 0,
+      max_output_tokens: 0,
       name_rule: 0,
       status: true,
       sync_official: true,
@@ -291,6 +295,8 @@ export function ModelMutateDrawer({
         tags: parseModelTags(model.tags),
         vendor_id: model.vendor_id,
         endpoints: model.endpoints || '',
+        context_length: model.context_length || 0,
+        max_output_tokens: model.max_output_tokens || 0,
         name_rule: model.name_rule || 0,
         status: model.status === 1,
         sync_official: model.sync_official === 1,
@@ -395,6 +401,8 @@ export function ModelMutateDrawer({
         tags: [],
         vendor_id: undefined,
         endpoints: '',
+        context_length: 0,
+        max_output_tokens: 0,
         name_rule: 0,
         status: true,
         sync_official: true,
@@ -718,6 +726,60 @@ export function ModelMutateDrawer({
                   </FormItem>
                 )}
               />
+
+              <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='context_length'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Context Length')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          step={1}
+                          {...field}
+                          onChange={(event) =>
+                            field.onChange(event.target.valueAsNumber || 0)
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('Maximum context window in tokens; use 0 if unknown')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='max_output_tokens'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Maximum Output Tokens')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          step={1}
+                          {...field}
+                          onChange={(event) =>
+                            field.onChange(event.target.valueAsNumber || 0)
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Maximum generated tokens per request; use 0 if unknown'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
