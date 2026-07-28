@@ -64,6 +64,26 @@ func TestMemoryModelRequestRateLimitPrioritizesSuccessCapOverTotalCap(t *testing
 	requireOpenAIErrorMessage(t, successLimited, "请求数限制")
 }
 
+func TestMemoryModelRequestRateLimitInheritsUserGroupWhenTokenGroupIsEmpty(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	configureMemoryModelRateLimit(t, `{"scale":[1,1]}`, 100, 100)
+
+	router := gin.New()
+	router.GET("/ok", func(c *gin.Context) {
+		c.Set("id", 4204)
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, "")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "scale")
+		c.Next()
+	}, ModelRequestRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	require.Equal(t, http.StatusOK, performModelRateLimitRequest(router, "/ok").Code)
+	limited := performModelRateLimitRequest(router, "/ok")
+	require.Equal(t, http.StatusTooManyRequests, limited.Code)
+	requireOpenAIErrorMessage(t, limited, "请求数限制")
+}
+
 func performModelRateLimitRequest(router http.Handler, path string) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, path, nil)

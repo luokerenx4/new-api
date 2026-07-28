@@ -305,6 +305,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := ensureTokenManagedKeyIDIndex(); err != nil {
+		return err
+	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -380,6 +383,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := ensureTokenManagedKeyIDIndex(); err != nil {
+		return err
 	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -524,6 +530,17 @@ func ensureUserExternalAccountIDSQLite() error {
 		}
 	}
 	return DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS `" + indexName + "` ON `" + tableName + "`(`" + columnName + "`) WHERE `" + columnName + "` IS NOT NULL").Error
+}
+
+func ensureTokenManagedKeyIDIndex() error {
+	if !DB.Migrator().HasTable(&Token{}) || DB.Migrator().HasIndex(&Token{}, "idx_tokens_managed_key_id") {
+		return nil
+	}
+	statement := "CREATE UNIQUE INDEX `idx_tokens_managed_key_id` ON `tokens` (`managed_key_id`)"
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+		statement = `CREATE UNIQUE INDEX "idx_tokens_managed_key_id" ON "tokens" ("managed_key_id")`
+	}
+	return DB.Exec(statement).Error
 }
 
 func ensureSubscriptionPlanTableSQLite() error {

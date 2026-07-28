@@ -22,10 +22,13 @@ type ProvisioningOperation struct {
 	UserId            int    `json:"user_id" gorm:"index"`
 	TokenId           int    `json:"token_id" gorm:"index"`
 	QuotaDelta        int    `json:"quota_delta" gorm:"type:int;default:0"`
+	HttpStatus        int    `json:"http_status" gorm:"type:int;default:0"`
+	Attempts          int    `json:"attempts" gorm:"type:int;default:1"`
 	RequestPayload    string `json:"request_payload" gorm:"type:text"`
 	ResponsePayload   string `json:"response_payload" gorm:"type:text"`
 	ErrorMessage      string `json:"error_message" gorm:"type:text"`
 	CreatedAt         int64  `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	UpdatedAt         int64  `json:"updated_at" gorm:"autoUpdateTime;column:updated_at"`
 }
 
 func RecordProvisioningOperation(op *ProvisioningOperation) error {
@@ -45,18 +48,89 @@ func StartProvisioningOperation(op *ProvisioningOperation) error {
 	if op.Status == "" {
 		op.Status = ProvisioningOperationStatusStarted
 	}
+	if op.Attempts == 0 {
+		op.Attempts = 1
+	}
 	if op.CreatedAt == 0 {
 		op.CreatedAt = common.GetTimestamp()
 	}
 	return DB.Create(op).Error
 }
 
-func FinishProvisioningOperation(op *ProvisioningOperation, status string, responsePayload string, errorMessage string) error {
+func RestartProvisioningOperation(op *ProvisioningOperation, staleBefore int64) (bool, error) {
+	if op == nil || op.Id == 0 {
+		return false, errors.New("provisioning operation is not persisted")
+	}
+	result := DB.Model(&ProvisioningOperation{}).
+		Where(
+			"id = ? AND (status = ? OR (status = ? AND updated_at <= ?))",
+			op.Id,
+			ProvisioningOperationStatusFailed,
+			ProvisioningOperationStatusStarted,
+			staleBefore,
+		).
+		Updates(map[string]interface{}{
+			"status":           ProvisioningOperationStatusStarted,
+			"http_status":      0,
+			"response_payload": "",
+			"error_message":    "",
+			"attempts":         gorm.Expr("attempts + 1"),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+	op.Status = ProvisioningOperationStatusStarted
+	op.HttpStatus = 0
+	op.ResponsePayload = ""
+	op.ErrorMessage = ""
+	op.Attempts++
+	return true, nil
+}
+
+func ReapplySuccessfulProvisioningOperation(op *ProvisioningOperation) (bool, error) {
+	if op == nil || op.Id == 0 {
+		return false, errors.New("provisioning operation is not persisted")
+	}
+	result := DB.Model(&ProvisioningOperation{}).
+		Where("id = ? AND status = ?", op.Id, ProvisioningOperationStatusSuccess).
+		Updates(map[string]interface{}{
+			"status":           ProvisioningOperationStatusStarted,
+			"http_status":      0,
+			"response_payload": "",
+			"error_message":    "",
+			"attempts":         gorm.Expr("attempts + 1"),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+	op.Status = ProvisioningOperationStatusStarted
+	op.HttpStatus = 0
+	op.ResponsePayload = ""
+	op.ErrorMessage = ""
+	op.Attempts++
+	return true, nil
+}
+
+func FinishProvisioningOperation(op *ProvisioningOperation, status string, httpStatus int, responsePayload string, errorMessage string) error {
+	return FinishProvisioningOperationWithTx(DB, op, status, httpStatus, responsePayload, errorMessage)
+}
+
+func FinishProvisioningOperationWithTx(tx *gorm.DB, op *ProvisioningOperation, status string, httpStatus int, responsePayload string, errorMessage string) error {
 	if op == nil || op.Id == 0 {
 		return errors.New("provisioning operation is not persisted")
 	}
-	return DB.Model(op).Updates(map[string]interface{}{
+	if tx == nil {
+		return errors.New("database transaction is nil")
+	}
+	return tx.Model(op).Updates(map[string]interface{}{
 		"status":           status,
+		"http_status":      httpStatus,
 		"response_payload": responsePayload,
 		"error_message":    errorMessage,
 		"user_id":          op.UserId,

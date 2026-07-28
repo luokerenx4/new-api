@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,6 +19,8 @@ import (
 
 var openAliceUsernameUnsafeChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
+const openAliceProvisioningOperationLeaseSeconds int64 = 5 * 60
+
 type OpenAliceProvisioningUpsertUserRequest struct {
 	OperationId       string `json:"operation_id"`
 	ExternalAccountId string `json:"external_account_id"`
@@ -35,10 +36,10 @@ type OpenAliceProvisioningCreateTokenRequest struct {
 	OperationId        string `json:"operation_id"`
 	ExternalAccountId  string `json:"external_account_id"`
 	UserId             int    `json:"user_id"`
+	ManagedKeyId       string `json:"managed_key_id"`
 	Name               string `json:"name"`
 	Quota              int    `json:"quota"`
 	ExpiredTime        int64  `json:"expired_time"`
-	Group              string `json:"group"`
 	ModelLimitsEnabled bool   `json:"model_limits_enabled"`
 	ModelLimits        string `json:"model_limits"`
 	AllowIps           string `json:"allow_ips"`
@@ -55,16 +56,18 @@ type OpenAliceProvisioningStatusRequest struct {
 }
 
 type OpenAliceProvisioningRateLimitPolicyRequest struct {
-	OperationId   string            `json:"operation_id"`
-	Enabled       *bool             `json:"enabled"`
-	WindowMinutes int               `json:"window_minutes"`
-	Groups        map[string][2]int `json:"groups"`
+	OperationId    string            `json:"operation_id"`
+	Enabled        *bool             `json:"enabled"`
+	WindowMinutes  int               `json:"window_minutes"`
+	Groups         map[string][2]int `json:"groups"`
+	RoutableGroups []string          `json:"routable_groups"`
 }
 
 type openAliceProvisioningRateLimitPolicyResponse struct {
-	Enabled       bool              `json:"enabled"`
-	WindowMinutes int               `json:"window_minutes"`
-	Groups        map[string][2]int `json:"groups"`
+	Enabled        bool              `json:"enabled"`
+	WindowMinutes  int               `json:"window_minutes"`
+	Groups         map[string][2]int `json:"groups"`
+	RoutableGroups []string          `json:"routable_groups"`
 }
 
 type openAliceProvisioningUserResponse struct {
@@ -83,6 +86,7 @@ type openAliceProvisioningUserResponse struct {
 type openAliceProvisioningTokenResponse struct {
 	Id                 int    `json:"id"`
 	UserId             int    `json:"user_id"`
+	ManagedKeyId       string `json:"managed_key_id,omitempty"`
 	Name               string `json:"name"`
 	Key                string `json:"key,omitempty"`
 	KeyPreview         string `json:"key_preview"`
@@ -97,12 +101,15 @@ type openAliceProvisioningTokenResponse struct {
 }
 
 type openAliceManagedModelPrice struct {
-	Unit                     string   `json:"unit"`
+	Mode                     string   `json:"mode"`
+	Currency                 string   `json:"currency"`
+	Unit                     string   `json:"unit,omitempty"`
 	InputUSDPerMillion       *float64 `json:"input_usd_per_million,omitempty"`
 	OutputUSDPerMillion      *float64 `json:"output_usd_per_million,omitempty"`
 	CachedInputUSDPerMillion *float64 `json:"cached_input_usd_per_million,omitempty"`
 	CacheWriteUSDPerMillion  *float64 `json:"cache_write_usd_per_million,omitempty"`
 	RequestUSD               *float64 `json:"request_usd,omitempty"`
+	BillingExpression        string   `json:"billing_expression,omitempty"`
 }
 
 type openAliceManagedModelProtocol struct {
@@ -158,6 +165,9 @@ func openAliceProvisioningTokenPayload(token *model.Token, includeKey bool) open
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
 	}
+	if token.ManagedKeyId != nil {
+		payload.ManagedKeyId = *token.ManagedKeyId
+	}
 	if includeKey {
 		payload.Key = token.GetFullKey()
 	}
@@ -165,23 +175,42 @@ func openAliceProvisioningTokenPayload(token *model.Token, includeKey bool) open
 }
 
 func OpenAliceProvisioningCatalog(c *gin.Context) {
+	externalAccountId := normalizeOpenAliceExternalAccountId(c.Param("external_account_id"))
+	user, err := model.GetUserByExternalAccountId(externalAccountId, false)
+	if err != nil {
+		status := http.StatusNotFound
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	pricings := model.GetPricing()
-	models := openAliceManagedModels(pricings, model.GetVendors(), model.GetSupportedEndpointMap())
+	models := openAliceManagedModels(pricings, model.GetVendors(), model.GetSupportedEndpointMap(), user.Group)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"models": models}})
 }
 
-func openAliceManagedModels(pricings []model.Pricing, pricingVendors []model.PricingVendor, endpointMap map[string]common.EndpointInfo) []openAliceManagedModel {
+func openAliceManagedModels(pricings []model.Pricing, pricingVendors []model.PricingVendor, endpointMap map[string]common.EndpointInfo, group string) []openAliceManagedModel {
 	vendors := map[int]string{}
 	for _, vendor := range pricingVendors {
 		vendors[vendor.ID] = vendor.Name
 	}
 	models := make([]openAliceManagedModel, 0, len(pricings))
 	for _, pricing := range pricings {
-		price := openAliceManagedModelPrice{Unit: "usd"}
-		if pricing.QuotaType == 1 {
+		if group != "" && !common.StringsContains(pricing.EnableGroup, group) {
+			continue
+		}
+		price := openAliceManagedModelPrice{Currency: "USD"}
+		if pricing.BillingMode == "tiered_expr" && strings.TrimSpace(pricing.BillingExpr) != "" {
+			price.Mode = "expression"
+			price.BillingExpression = pricing.BillingExpr
+		} else if pricing.QuotaType == 1 {
+			price.Mode = "per_request"
+			price.Unit = "usd"
 			value := pricing.ModelPrice
 			price.RequestUSD = &value
 		} else {
+			price.Mode = "per_token"
 			input := pricing.ModelRatio * 2
 			output := input * pricing.CompletionRatio
 			price.Unit = "usd_per_million_tokens"
@@ -227,12 +256,82 @@ func openAliceManagedModels(pricings []model.Pricing, pricingVendors []model.Pri
 func openAliceProvisioningRateLimitPolicyPayload() openAliceProvisioningRateLimitPolicyResponse {
 	groups := map[string][2]int{}
 	raw := setting.ModelRequestRateLimitGroup2JSONString()
-	_ = json.Unmarshal([]byte(raw), &groups)
+	_ = common.Unmarshal([]byte(raw), &groups)
 	return openAliceProvisioningRateLimitPolicyResponse{
-		Enabled:       setting.ModelRequestRateLimitEnabled,
-		WindowMinutes: setting.ModelRequestRateLimitDurationMinutes,
-		Groups:        groups,
+		Enabled:        setting.ModelRequestRateLimitEnabled,
+		WindowMinutes:  setting.ModelRequestRateLimitDurationMinutes,
+		Groups:         groups,
+		RoutableGroups: setting.GetOpenAliceRoutableGroups(),
 	}
+}
+
+func replayOpenAliceProvisioningOperation(c *gin.Context, op *model.ProvisioningOperation) {
+	status := op.HttpStatus
+	if status < 200 || status > 599 {
+		status = http.StatusOK
+	}
+	if op.Action == "token.create" && op.TokenId > 0 {
+		token, err := model.GetTokenById(op.TokenId)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(status, gin.H{"success": true, "data": openAliceProvisioningTokenPayload(token, true)})
+		return
+	}
+	payload := strings.TrimSpace(op.ResponsePayload)
+	if payload == "" {
+		payload = `{"success":true}`
+	}
+	c.Data(status, "application/json; charset=utf-8", []byte(payload))
+}
+
+func resumeOpenAliceProvisioningOperation(c *gin.Context, op *model.ProvisioningOperation, action string, requestPayload string) (*model.ProvisioningOperation, bool) {
+	if op.Action != action || op.RequestPayload != requestPayload {
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "operation_id was already used for a different request",
+			"code":    "operation_mismatch",
+		})
+		return nil, false
+	}
+	switch op.Status {
+	case model.ProvisioningOperationStatusSuccess:
+		if !openAliceProvisioningDesiredStateAction(action) {
+			replayOpenAliceProvisioningOperation(c, op)
+			return nil, false
+		}
+		restarted, err := model.ReapplySuccessfulProvisioningOperation(op)
+		if err != nil {
+			common.ApiError(c, err)
+			return nil, false
+		}
+		if restarted {
+			return op, true
+		}
+	case model.ProvisioningOperationStatusFailed, model.ProvisioningOperationStatusStarted:
+		restarted, err := model.RestartProvisioningOperation(
+			op,
+			common.GetTimestamp()-openAliceProvisioningOperationLeaseSeconds,
+		)
+		if err != nil {
+			common.ApiError(c, err)
+			return nil, false
+		}
+		if restarted {
+			return op, true
+		}
+	}
+	c.JSON(http.StatusConflict, gin.H{
+		"success": false,
+		"message": "operation is already in progress",
+		"code":    "operation_in_progress",
+	})
+	return nil, false
+}
+
+func openAliceProvisioningDesiredStateAction(action string) bool {
+	return action == "user.upsert" || action == "rate_limit_policy.update"
 }
 
 func startOpenAliceProvisioningOperation(c *gin.Context, operationId string, action string, externalAccountId string, request any) (*model.ProvisioningOperation, bool) {
@@ -241,18 +340,17 @@ func startOpenAliceProvisioningOperation(c *gin.Context, operationId string, act
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "operation_id is required"})
 		return nil, false
 	}
-	if exists, err := model.ProvisioningOperationExists(operationId); err != nil {
-		common.ApiError(c, err)
-		return nil, false
-	} else if exists {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "duplicate operation_id", "code": "duplicate_operation"})
-		return nil, false
-	}
 	requestPayload := "{}"
 	if request != nil {
 		if data, err := common.Marshal(request); err == nil {
 			requestPayload = string(data)
 		}
+	}
+	if existing, err := model.GetProvisioningOperationByOperationId(operationId); err == nil {
+		return resumeOpenAliceProvisioningOperation(c, existing, action, requestPayload)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		common.ApiError(c, err)
+		return nil, false
 	}
 	op := &model.ProvisioningOperation{
 		OperationId:       operationId,
@@ -262,13 +360,27 @@ func startOpenAliceProvisioningOperation(c *gin.Context, operationId string, act
 		RequestPayload:    requestPayload,
 	}
 	if err := model.StartProvisioningOperation(op); err != nil {
+		existing, getErr := model.GetProvisioningOperationByOperationId(operationId)
+		if getErr == nil {
+			return resumeOpenAliceProvisioningOperation(c, existing, action, requestPayload)
+		}
 		common.ApiError(c, err)
 		return nil, false
 	}
 	return op, true
 }
 
-func finishOpenAliceProvisioningOperation(op *model.ProvisioningOperation, response any, errMessage string) {
+func openAliceProvisioningResponsePayload(response any) string {
+	responsePayload := "{}"
+	if response != nil {
+		if data, err := common.Marshal(response); err == nil {
+			responsePayload = string(data)
+		}
+	}
+	return responsePayload
+}
+
+func finishOpenAliceProvisioningOperation(op *model.ProvisioningOperation, httpStatus int, response any, errMessage string) {
 	if op == nil {
 		return
 	}
@@ -276,19 +388,14 @@ func finishOpenAliceProvisioningOperation(op *model.ProvisioningOperation, respo
 	if errMessage != "" {
 		status = model.ProvisioningOperationStatusFailed
 	}
-	responsePayload := "{}"
-	if response != nil {
-		if data, err := common.Marshal(response); err == nil {
-			responsePayload = string(data)
-		}
-	}
-	if err := model.FinishProvisioningOperation(op, status, responsePayload, errMessage); err != nil {
+	responsePayload := openAliceProvisioningResponsePayload(response)
+	if err := model.FinishProvisioningOperation(op, status, httpStatus, responsePayload, errMessage); err != nil {
 		common.SysLog("failed to finish OpenAlice provisioning operation: " + err.Error())
 	}
 }
 
 func openAliceProvisioningError(c *gin.Context, op *model.ProvisioningOperation, status int, message string) {
-	finishOpenAliceProvisioningOperation(op, gin.H{"success": false, "message": message}, message)
+	finishOpenAliceProvisioningOperation(op, status, gin.H{"success": false, "message": message}, message)
 	c.JSON(status, gin.H{"success": false, "message": message})
 }
 
@@ -314,56 +421,96 @@ func normalizeOpenAliceGatewayUsername(username string, externalAccountId string
 }
 
 func getOpenAliceProvisioningUser(userId int, externalAccountId string, selectAll bool) (*model.User, error) {
+	return getOpenAliceProvisioningUserWithTx(model.DB, userId, externalAccountId, selectAll)
+}
+
+func getOpenAliceProvisioningUserWithTx(tx *gorm.DB, userId int, externalAccountId string, selectAll bool) (*model.User, error) {
+	if tx == nil {
+		return nil, errors.New("database transaction is nil")
+	}
+	user := &model.User{}
 	if userId > 0 {
-		return model.GetUserById(userId, selectAll)
+		query := tx
+		if !selectAll {
+			query = query.Omit("password")
+		}
+		err := query.First(user, "id = ?", userId).Error
+		return user, err
 	}
 	externalAccountId = normalizeOpenAliceExternalAccountId(externalAccountId)
 	if externalAccountId == "" {
 		return nil, errors.New("external_account_id or user_id is required")
 	}
-	return model.GetUserByExternalAccountId(externalAccountId, selectAll)
+	query := tx
+	if !selectAll {
+		query = query.Omit("password")
+	}
+	err := query.First(user, "external_account_id = ?", externalAccountId).Error
+	return user, err
 }
 
-func adjustOpenAliceExecutionQuota(userId int, token *model.Token, delta int) error {
-	if delta == 0 {
-		return nil
-	}
-	if token == nil {
-		return errors.New("token is nil")
-	}
-	if delta > 0 {
-		ok, err := model.AdjustTokenRemainQuota(token.Id, token.Key, delta)
-		if err != nil {
+func adjustOpenAliceExecutionQuota(op *model.ProvisioningOperation, tokenId int, delta int) (*model.Token, error) {
+	var token model.Token
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&token, "id = ?", tokenId).Error; err != nil {
 			return err
 		}
-		if !ok {
-			return errors.New("token quota adjustment rejected")
+		if delta > 0 {
+			if err := tx.Model(&model.Token{}).Where("id = ?", token.Id).
+				Update("remain_quota", gorm.Expr("remain_quota + ?", delta)).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.User{}).Where("id = ?", token.UserId).
+				Update("quota", gorm.Expr("quota + ?", delta)).Error; err != nil {
+				return err
+			}
+		} else if delta < 0 {
+			amount := -delta
+			tokenResult := tx.Model(&model.Token{}).
+				Where("id = ? AND remain_quota >= ?", token.Id, amount).
+				Update("remain_quota", gorm.Expr("remain_quota - ?", amount))
+			if tokenResult.Error != nil {
+				return tokenResult.Error
+			}
+			if tokenResult.RowsAffected == 0 {
+				return errors.New("token quota insufficient")
+			}
+			userResult := tx.Model(&model.User{}).
+				Where("id = ? AND quota >= ?", token.UserId, amount).
+				Update("quota", gorm.Expr("quota - ?", amount))
+			if userResult.Error != nil {
+				return userResult.Error
+			}
+			if userResult.RowsAffected == 0 {
+				return errors.New("user quota insufficient")
+			}
 		}
-		if err := model.IncreaseUserQuota(userId, delta, true); err != nil {
-			_, _ = model.AdjustTokenRemainQuota(token.Id, token.Key, -delta)
+		if err := tx.First(&token, "id = ?", token.Id).Error; err != nil {
 			return err
 		}
-		return nil
-	}
-
-	amount := -delta
-	ok, err := model.TryPreConsumeUserQuota(userId, amount)
+		op.UserId = token.UserId
+		op.TokenId = token.Id
+		op.QuotaDelta = delta
+		response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(&token, false)}
+		return model.FinishProvisioningOperationWithTx(
+			tx,
+			op,
+			model.ProvisioningOperationStatusSuccess,
+			http.StatusOK,
+			openAliceProvisioningResponsePayload(response),
+			"",
+		)
+	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !ok {
-		return errors.New("user quota insufficient")
+	if err := model.InvalidateUserCache(token.UserId); err != nil {
+		common.SysLog("failed to invalidate OpenAlice user cache: " + err.Error())
 	}
-	ok, err = model.AdjustTokenRemainQuota(token.Id, token.Key, delta)
-	if err != nil {
-		_ = model.IncreaseUserQuota(userId, amount, true)
-		return err
+	if err := model.InvalidateUserTokensCache(token.UserId); err != nil {
+		common.SysLog("failed to invalidate OpenAlice token cache: " + err.Error())
 	}
-	if !ok {
-		_ = model.IncreaseUserQuota(userId, amount, true)
-		return errors.New("token quota insufficient")
-	}
-	return nil
+	return &token, nil
 }
 
 func OpenAliceProvisioningUpsertUser(c *gin.Context) {
@@ -381,73 +528,97 @@ func OpenAliceProvisioningUpsertUser(c *gin.Context) {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, "external_account_id is required")
 		return
 	}
+	if req.InitialQuota != nil && *req.InitialQuota < 0 {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, "initial_quota cannot be negative")
+		return
+	}
 
-	user, err := model.GetUserByExternalAccountId(req.ExternalAccountId, true)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	var user model.User
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.First(&user, "external_account_id = ?", req.ExternalAccountId).Error
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			password, genErr := common.GenerateRandomKey(32)
+			if genErr != nil {
+				return genErr
+			}
+			externalAccountId := req.ExternalAccountId
+			user = model.User{
+				Username:          normalizeOpenAliceGatewayUsername(req.Username, req.ExternalAccountId),
+				Password:          password,
+				DisplayName:       strings.TrimSpace(req.DisplayName),
+				Email:             strings.TrimSpace(req.Email),
+				Group:             common.GetStringIfEmpty(strings.TrimSpace(req.Group), "default"),
+				Role:              common.RoleCommonUser,
+				Status:            common.UserStatusEnabled,
+				ExternalAccountId: &externalAccountId,
+			}
+			if user.DisplayName == "" {
+				user.DisplayName = user.Username
+			}
+			if req.Status != nil {
+				user.Status = *req.Status
+			}
+			if err := user.InsertWithTx(tx, 0); err != nil {
+				return err
+			}
+			if req.InitialQuota != nil && *req.InitialQuota > 0 {
+				if err := tx.Model(&model.User{}).Where("id = ?", user.Id).
+					Update("quota", gorm.Expr("quota + ?", *req.InitialQuota)).Error; err != nil {
+					return err
+				}
+				op.QuotaDelta = *req.InitialQuota
+			}
+		case err != nil:
+			return err
+		default:
+			updates := map[string]interface{}{}
+			if strings.TrimSpace(req.Email) != "" {
+				updates["email"] = strings.TrimSpace(req.Email)
+			}
+			if strings.TrimSpace(req.DisplayName) != "" {
+				updates["display_name"] = strings.TrimSpace(req.DisplayName)
+			}
+			if strings.TrimSpace(req.Group) != "" {
+				updates["group"] = strings.TrimSpace(req.Group)
+			}
+			if req.Status != nil {
+				updates["status"] = *req.Status
+			}
+			if len(updates) > 0 {
+				if err := tx.Model(&model.User{}).Where("id = ?", user.Id).Updates(updates).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if err := tx.Model(&model.Token{}).Where("user_id = ?", user.Id).Update("group", "").Error; err != nil {
+			return err
+		}
+		if err := tx.First(&user, "id = ?", user.Id).Error; err != nil {
+			return err
+		}
+		op.UserId = user.Id
+		response := gin.H{"success": true, "data": openAliceProvisioningUserPayload(&user)}
+		return model.FinishProvisioningOperationWithTx(
+			tx,
+			op,
+			model.ProvisioningOperationStatusSuccess,
+			http.StatusOK,
+			openAliceProvisioningResponsePayload(response),
+			"",
+		)
+	})
+	if err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		password, genErr := common.GenerateRandomKey(32)
-		if genErr != nil {
-			openAliceProvisioningError(c, op, http.StatusInternalServerError, genErr.Error())
-			return
-		}
-		externalAccountId := req.ExternalAccountId
-		user = &model.User{
-			Username:          normalizeOpenAliceGatewayUsername(req.Username, req.ExternalAccountId),
-			Password:          password,
-			DisplayName:       strings.TrimSpace(req.DisplayName),
-			Email:             strings.TrimSpace(req.Email),
-			Group:             common.GetStringIfEmpty(strings.TrimSpace(req.Group), "default"),
-			Role:              common.RoleCommonUser,
-			Status:            common.UserStatusEnabled,
-			ExternalAccountId: &externalAccountId,
-		}
-		if user.DisplayName == "" {
-			user.DisplayName = user.Username
-		}
-		if req.Status != nil {
-			user.Status = *req.Status
-		}
-		if err := user.Insert(0); err != nil {
-			openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
-			return
-		}
-		if req.InitialQuota != nil && *req.InitialQuota > 0 {
-			if err := model.IncreaseUserQuota(user.Id, *req.InitialQuota, true); err != nil {
-				openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-				return
-			}
-			user.Quota += *req.InitialQuota
-			op.QuotaDelta = *req.InitialQuota
-		}
-	} else {
-		updates := map[string]interface{}{}
-		if strings.TrimSpace(req.Email) != "" {
-			updates["email"] = strings.TrimSpace(req.Email)
-		}
-		if strings.TrimSpace(req.DisplayName) != "" {
-			updates["display_name"] = strings.TrimSpace(req.DisplayName)
-		}
-		if strings.TrimSpace(req.Group) != "" {
-			updates["group"] = strings.TrimSpace(req.Group)
-		}
-		if req.Status != nil {
-			updates["status"] = *req.Status
-		}
-		if len(updates) > 0 {
-			if err := model.DB.Model(user).Updates(updates).Error; err != nil {
-				openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-				return
-			}
-			user, _ = model.GetUserById(user.Id, true)
-		}
+	if err := model.InvalidateUserCache(user.Id); err != nil {
+		common.SysLog("failed to invalidate OpenAlice user cache: " + err.Error())
 	}
-
-	op.UserId = user.Id
-	response := gin.H{"success": true, "data": openAliceProvisioningUserPayload(user)}
-	finishOpenAliceProvisioningOperation(op, response, "")
+	if err := model.InvalidateUserTokensCache(user.Id); err != nil {
+		common.SysLog("failed to invalidate OpenAlice token cache: " + err.Error())
+	}
+	response := gin.H{"success": true, "data": openAliceProvisioningUserPayload(&user)}
 	c.JSON(http.StatusOK, response)
 }
 
@@ -458,67 +629,97 @@ func OpenAliceProvisioningCreateToken(c *gin.Context) {
 		return
 	}
 	req.ExternalAccountId = normalizeOpenAliceExternalAccountId(req.ExternalAccountId)
+	req.ManagedKeyId = strings.TrimSpace(req.ManagedKeyId)
 	op, ok := startOpenAliceProvisioningOperation(c, req.OperationId, "token.create", req.ExternalAccountId, req)
 	if !ok {
 		return
 	}
-	user, err := getOpenAliceProvisioningUser(req.UserId, req.ExternalAccountId, true)
-	if err != nil {
-		status := http.StatusBadRequest
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			status = http.StatusInternalServerError
-		}
-		openAliceProvisioningError(c, op, status, err.Error())
+	if req.ManagedKeyId == "" || len(req.ManagedKeyId) > 160 {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, "managed_key_id is required and must not exceed 160 characters")
 		return
 	}
 	if req.Quota < 0 {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, "quota cannot be negative")
 		return
 	}
-	key, err := common.GenerateKey()
-	if err != nil {
-		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-		return
-	}
-	allowIps := strings.TrimSpace(req.AllowIps)
-	token := &model.Token{
-		UserId:             user.Id,
-		Name:               common.GetStringIfEmpty(strings.TrimSpace(req.Name), "OpenAlice Managed AI"),
-		Key:                key,
-		Status:             common.TokenStatusEnabled,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        req.ExpiredTime,
-		RemainQuota:        req.Quota,
-		ModelLimitsEnabled: req.ModelLimitsEnabled,
-		ModelLimits:        strings.TrimSpace(req.ModelLimits),
-		Group:              common.GetStringIfEmpty(strings.TrimSpace(req.Group), user.Group),
-		CrossGroupRetry:    false,
-	}
-	if token.ExpiredTime == 0 {
-		token.ExpiredTime = -1
-	}
-	if allowIps != "" {
-		token.AllowIps = &allowIps
-	}
-	if err := token.Insert(); err != nil {
-		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if req.Quota > 0 {
-		if err := model.IncreaseUserQuota(user.Id, req.Quota, true); err != nil {
-			_ = token.Delete()
-			openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-			return
-		}
-	}
-	op.UserId = user.Id
-	op.TokenId = token.Id
-	op.QuotaDelta = req.Quota
 
-	response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(token, true)}
-	auditResponse := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(token, false)}
-	finishOpenAliceProvisioningOperation(op, auditResponse, "")
+	var token model.Token
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		user, err := getOpenAliceProvisioningUserWithTx(tx, req.UserId, req.ExternalAccountId, true)
+		if err != nil {
+			return err
+		}
+		managedKeyId := req.ManagedKeyId
+		err = tx.First(&token, "managed_key_id = ?", managedKeyId).Error
+		switch {
+		case err == nil:
+			if token.UserId != user.Id {
+				return errors.New("managed_key_id belongs to another user")
+			}
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			key, genErr := common.GenerateKey()
+			if genErr != nil {
+				return genErr
+			}
+			allowIps := strings.TrimSpace(req.AllowIps)
+			token = model.Token{
+				UserId:             user.Id,
+				ManagedKeyId:       &managedKeyId,
+				Name:               common.GetStringIfEmpty(strings.TrimSpace(req.Name), "OpenAlice Managed AI"),
+				Key:                key,
+				Status:             common.TokenStatusEnabled,
+				CreatedTime:        common.GetTimestamp(),
+				AccessedTime:       common.GetTimestamp(),
+				ExpiredTime:        req.ExpiredTime,
+				RemainQuota:        req.Quota,
+				ModelLimitsEnabled: req.ModelLimitsEnabled,
+				ModelLimits:        strings.TrimSpace(req.ModelLimits),
+				Group:              "",
+				CrossGroupRetry:    false,
+			}
+			if token.ExpiredTime == 0 {
+				token.ExpiredTime = -1
+			}
+			if allowIps != "" {
+				token.AllowIps = &allowIps
+			}
+			if err := tx.Create(&token).Error; err != nil {
+				return err
+			}
+			if req.Quota > 0 {
+				if err := tx.Model(&model.User{}).Where("id = ?", user.Id).
+					Update("quota", gorm.Expr("quota + ?", req.Quota)).Error; err != nil {
+					return err
+				}
+			}
+			op.QuotaDelta = req.Quota
+		default:
+			return err
+		}
+		op.UserId = user.Id
+		op.TokenId = token.Id
+		auditResponse := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(&token, false)}
+		return model.FinishProvisioningOperationWithTx(
+			tx,
+			op,
+			model.ProvisioningOperationStatusSuccess,
+			http.StatusOK,
+			openAliceProvisioningResponsePayload(auditResponse),
+			"",
+		)
+	})
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusBadRequest
+		}
+		openAliceProvisioningError(c, op, status, err.Error())
+		return
+	}
+	if err := model.InvalidateUserCache(token.UserId); err != nil {
+		common.SysLog("failed to invalidate OpenAlice user cache: " + err.Error())
+	}
+	response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(&token, true)}
 	c.JSON(http.StatusOK, response)
 }
 
@@ -532,21 +733,12 @@ func OpenAliceProvisioningAdjustTokenQuota(c *gin.Context) {
 	if !ok {
 		return
 	}
-	token, err := model.GetTokenById(c.GetInt("token_id"))
+	token, err := adjustOpenAliceExecutionQuota(op, c.GetInt("token_id"), req.Delta)
 	if err != nil {
-		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := adjustOpenAliceExecutionQuota(token.UserId, token, req.Delta); err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
-	token, _ = model.GetTokenById(token.Id)
-	op.UserId = token.UserId
-	op.TokenId = token.Id
-	op.QuotaDelta = req.Delta
 	response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(token, false)}
-	finishOpenAliceProvisioningOperation(op, response, "")
 	c.JSON(http.StatusOK, response)
 }
 
@@ -564,20 +756,35 @@ func OpenAliceProvisioningUpdateTokenStatus(c *gin.Context) {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, "invalid token status")
 		return
 	}
-	token, err := model.GetTokenById(c.GetInt("token_id"))
+	var token model.Token
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&token, "id = ?", c.GetInt("token_id")).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Token{}).Where("id = ?", token.Id).Update("status", req.Status).Error; err != nil {
+			return err
+		}
+		token.Status = req.Status
+		op.UserId = token.UserId
+		op.TokenId = token.Id
+		response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(&token, false)}
+		return model.FinishProvisioningOperationWithTx(
+			tx,
+			op,
+			model.ProvisioningOperationStatusSuccess,
+			http.StatusOK,
+			openAliceProvisioningResponsePayload(response),
+			"",
+		)
+	})
 	if err != nil {
-		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
-		return
-	}
-	token.Status = req.Status
-	if err := token.Update(); err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
-	op.UserId = token.UserId
-	op.TokenId = token.Id
-	response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(token, false)}
-	finishOpenAliceProvisioningOperation(op, response, "")
+	if err := model.InvalidateUserTokensCache(token.UserId); err != nil {
+		common.SysLog("failed to invalidate OpenAlice token cache: " + err.Error())
+	}
+	response := gin.H{"success": true, "data": openAliceProvisioningTokenPayload(&token, false)}
 	c.JSON(http.StatusOK, response)
 }
 
@@ -599,13 +806,17 @@ func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, "groups is required")
 		return
 	}
+	if req.RoutableGroups == nil {
+		openAliceProvisioningError(c, op, http.StatusBadRequest, "routable_groups is required")
+		return
+	}
 	for group := range req.Groups {
-		if !validOpenAliceProvisioningGroup(group) {
+		if group != strings.TrimSpace(group) || !validOpenAliceProvisioningGroup(group) {
 			openAliceProvisioningError(c, op, http.StatusBadRequest, "invalid group name")
 			return
 		}
 	}
-	groupsJSONBytes, err := json.Marshal(req.Groups)
+	groupsJSONBytes, err := common.Marshal(req.Groups)
 	if err != nil {
 		openAliceProvisioningError(c, op, http.StatusBadRequest, err.Error())
 		return
@@ -616,12 +827,34 @@ func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
 		return
 	}
 	groupNames := openAliceProvisioningSortedGroupNames(req.Groups)
-	usableGroupsJSON, err := openAliceProvisioningMergedUsableGroupsJSON(groupNames)
+	routableGroups := openAliceProvisioningSortedStringSet(req.RoutableGroups)
+	groupSet := make(map[string]bool, len(groupNames))
+	for _, group := range groupNames {
+		groupSet[group] = true
+	}
+	for _, group := range routableGroups {
+		if !validOpenAliceProvisioningGroup(group) || !groupSet[group] {
+			openAliceProvisioningError(c, op, http.StatusBadRequest, "routable_groups must be a subset of groups")
+			return
+		}
+	}
+	previousManagedGroups := setting.GetOpenAliceManagedGroups()
+	usableGroupsJSON, err := openAliceProvisioningDesiredUsableGroupsJSON(previousManagedGroups, groupNames)
 	if err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
-	groupRatioJSON, err := openAliceProvisioningMergedGroupRatioJSON(groupNames)
+	groupRatioJSON, err := openAliceProvisioningDesiredGroupRatioJSON(previousManagedGroups, groupNames)
+	if err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
+	managedGroupsJSONBytes, err := common.Marshal(groupNames)
+	if err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
+	routableGroupsJSONBytes, err := common.Marshal(routableGroups)
 	if err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
@@ -630,22 +863,24 @@ func OpenAliceProvisioningUpdateRateLimitPolicy(c *gin.Context) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	if err := openAliceProvisioningSyncManagedChannelGroups(previousManagedGroups, routableGroups); err != nil {
+		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
+		return
+	}
 	if err := model.UpdateOptionsBulk(map[string]string{
 		"ModelRequestRateLimitEnabled":         strconv.FormatBool(enabled),
 		"ModelRequestRateLimitDurationMinutes": strconv.Itoa(req.WindowMinutes),
 		"ModelRequestRateLimitGroup":           groupsJSON,
 		"UserUsableGroups":                     usableGroupsJSON,
 		"GroupRatio":                           groupRatioJSON,
+		"OpenAliceManagedGroups":               string(managedGroupsJSONBytes),
+		"OpenAliceRoutableGroups":              string(routableGroupsJSONBytes),
 	}); err != nil {
 		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := openAliceProvisioningSyncManagedChannelGroups(groupNames); err != nil {
-		openAliceProvisioningError(c, op, http.StatusInternalServerError, err.Error())
-		return
-	}
 	response := gin.H{"success": true, "data": openAliceProvisioningRateLimitPolicyPayload()}
-	finishOpenAliceProvisioningOperation(op, response, "")
+	finishOpenAliceProvisioningOperation(op, http.StatusOK, response, "")
 	c.JSON(http.StatusOK, response)
 }
 
@@ -704,36 +939,53 @@ func openAliceProvisioningSortedGroupNames(groups map[string][2]int) []string {
 	return groupNames
 }
 
-func openAliceProvisioningMergedUsableGroupsJSON(groupNames []string) (string, error) {
+func openAliceProvisioningSortedStringSet(groups []string) []string {
+	seen := make(map[string]bool, len(groups))
+	out := make([]string, 0, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group == "" || seen[group] {
+			continue
+		}
+		seen[group] = true
+		out = append(out, group)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func openAliceProvisioningDesiredUsableGroupsJSON(previousManagedGroups []string, groupNames []string) (string, error) {
 	usableGroups := map[string]string{}
 	raw := strings.TrimSpace(setting.UserUsableGroups2JSONString())
 	if raw != "" {
-		if err := json.Unmarshal([]byte(raw), &usableGroups); err != nil {
+		if err := common.Unmarshal([]byte(raw), &usableGroups); err != nil {
 			return "", err
 		}
 	}
-	for _, group := range groupNames {
-		if _, ok := usableGroups[group]; !ok {
-			usableGroups[group] = "OpenAlice managed " + group
-		}
+	for _, group := range previousManagedGroups {
+		delete(usableGroups, group)
 	}
-	data, err := json.Marshal(usableGroups)
+	for _, group := range groupNames {
+		usableGroups[group] = "OpenAlice managed " + group
+	}
+	data, err := common.Marshal(usableGroups)
 	return string(data), err
 }
 
-func openAliceProvisioningMergedGroupRatioJSON(groupNames []string) (string, error) {
+func openAliceProvisioningDesiredGroupRatioJSON(previousManagedGroups []string, groupNames []string) (string, error) {
 	groupRatios := ratio_setting.GetGroupRatioCopy()
-	for _, group := range groupNames {
-		if _, ok := groupRatios[group]; !ok {
-			groupRatios[group] = 1
-		}
+	for _, group := range previousManagedGroups {
+		delete(groupRatios, group)
 	}
-	data, err := json.Marshal(groupRatios)
+	for _, group := range groupNames {
+		groupRatios[group] = 1
+	}
+	data, err := common.Marshal(groupRatios)
 	return string(data), err
 }
 
-func openAliceProvisioningSyncManagedChannelGroups(groupNames []string) error {
-	if !common.OpenAliceManagedMode || len(groupNames) == 0 {
+func openAliceProvisioningSyncManagedChannelGroups(previousManagedGroups []string, routableGroups []string) error {
+	if !common.OpenAliceManagedMode {
 		return nil
 	}
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
@@ -742,7 +994,7 @@ func openAliceProvisioningSyncManagedChannelGroups(groupNames []string) error {
 			return err
 		}
 		for _, channel := range channels {
-			merged := openAliceProvisioningMergeGroupCSV(channel.Group, groupNames)
+			merged := openAliceProvisioningReplaceGroupCSV(channel.Group, previousManagedGroups, routableGroups)
 			channel.Group = merged
 			if err := tx.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("group", merged).Error; err != nil {
 				return err
@@ -760,18 +1012,22 @@ func openAliceProvisioningSyncManagedChannelGroups(groupNames []string) error {
 	return nil
 }
 
-func openAliceProvisioningMergeGroupCSV(existing string, groupNames []string) string {
+func openAliceProvisioningReplaceGroupCSV(existing string, removeGroups []string, addGroups []string) string {
+	remove := make(map[string]bool, len(removeGroups))
+	for _, group := range removeGroups {
+		remove[strings.TrimSpace(group)] = true
+	}
 	seen := map[string]bool{}
-	merged := make([]string, 0, len(groupNames)+1)
+	merged := make([]string, 0, len(addGroups)+1)
 	for _, group := range strings.Split(existing, ",") {
 		group = strings.TrimSpace(group)
-		if group == "" || seen[group] {
+		if group == "" || seen[group] || remove[group] {
 			continue
 		}
 		seen[group] = true
 		merged = append(merged, group)
 	}
-	for _, group := range groupNames {
+	for _, group := range addGroups {
 		group = strings.TrimSpace(group)
 		if group == "" || seen[group] {
 			continue

@@ -100,31 +100,49 @@ Current endpoints:
 - `POST /api/openalice/provisioning/tokens/:id/quota`
 - `POST /api/openalice/provisioning/tokens/:id/status`
 - `POST /api/openalice/provisioning/rate-limits`
-- `GET /api/openalice/provisioning/catalog`
+- `GET /api/openalice/provisioning/accounts/:external_account_id/catalog`
 - `GET /api/openalice/provisioning/accounts/:external_account_id/snapshot`
 
-Every mutating request requires `operation_id`. Duplicate operation ids are
-rejected to prevent Cloud retries from double-creating tokens or double-granting
-quota.
+Every mutating request requires `operation_id`. The operation row is a
+replayable idempotency ledger:
+
+- additive operations replay a completed success without applying their effect
+  twice;
+- desired-state operations (`user.upsert` and `rate_limit_policy.update`)
+  reapply the same canonical request in place so they can repair later drift
+  without growing the ledger;
+- a failed attempt may be retried with the same request;
+- a fresh in-progress operation returns `409 operation_in_progress`;
+- an abandoned in-progress operation can be reclaimed after its five-minute
+  lease expires;
+- reusing an id for a different action or payload returns
+  `409 operation_mismatch`.
+
+User, token, and quota mutations commit their successful operation record in
+the same database transaction. Token creation additionally requires a stable
+`managed_key_id`; Gateway enforces its uniqueness and returns the same managed
+key on retry without granting quota twice.
 
 The intended long-term boundary is still narrow:
 
 - create or find a gateway user for an external OpenAlice account id;
-- issue a token for that user and return the raw key once;
+- issue or recover the stable managed token for that user;
 - increase or set token/user quota through an auditable operation;
 - freeze or revoke tokens;
 - disable a user;
 - update the Gateway model request rate-limit policy from the Cloud admin plan
   matrix;
-- return a flat, read-only customer model catalog with pricing, protocol, and
-  structured context/output limits, without exposing groups or channels;
+- return an account-filtered, read-only customer model catalog with pricing,
+  protocol, and structured context/output limits, without exposing groups or
+  channels;
 - return reconciliation snapshots: user quota, token quota, used quota, request
   count, token status, and recent usage totals.
 
 Implemented model additions:
 
 - `external_account_id` on gateway users, unique and nullable;
-- `provisioning_operations` append-only audit table.
+- nullable, unique `managed_key_id` on managed Gateway tokens;
+- `provisioning_operations` durable idempotency and audit ledger.
 
 Possible later addition:
 
@@ -137,9 +155,11 @@ Possible later addition:
   `/api/openalice/provisioning/*` as a private control plane. In production,
   expose only the data plane to users and route provisioning through localhost,
   a private network, or an equivalent internal service boundary.
-- `POST /api/openalice/provisioning/rate-limits` writes Gateway's model request
-  rate-limit option. Keep this endpoint private; it is an operator control-plane
-  action initiated by OpenAlice Cloud, not a customer-facing setting.
+- `POST /api/openalice/provisioning/rate-limits` applies desired state for the
+  rate-limit matrix, managed groups, and the separate `routable_groups`
+  allowlist. Managed groups that disappear are removed from usable-group,
+  ratio, channel, and ability state. Keep this endpoint private; it is an
+  operator control-plane action initiated by OpenAlice Cloud.
 - In the standard stack checkout, follow the outer
   `docs/gateway-managed-group-policy.md` for the OpenAlice meaning of groups and
   the model/provider/plan onboarding procedure. The current endpoint also
@@ -147,9 +167,12 @@ Possible later addition:
   abilities; do not treat it as a rate-limit-only write.
 - Keep the existing atomic wallet pre-consume path. It is the correct admission
   pattern for concurrent quota use.
-- Token quota and user quota both matter today. If OpenAlice Cloud wants one
-  balance concept, prefer provisioning both consistently rather than bypassing
-  one layer without a migration.
+- Token quota and user quota both matter today. Managed token quota operations
+  update both atomically.
+- The Gateway user group is the sole normal OpenAlice execution-policy owner.
+  Managed tokens keep an empty explicit group so plan changes cannot be masked
+  by stale token-level state. User upsert clears legacy explicit groups from
+  every token under that Gateway user.
 - The existing `access_token` header auth is useful for bootstrap, but should
   not become the final long-term Cloud integration contract without scoped
   service permissions and audit events.

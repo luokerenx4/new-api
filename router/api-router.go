@@ -14,6 +14,22 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	openAliceProvisioningRoute := router.Group("/api/openalice/provisioning")
+	openAliceProvisioningRoute.Use(middleware.RouteTag("api"))
+	openAliceProvisioningRoute.Use(gzip.Gzip(gzip.DefaultCompression))
+	openAliceProvisioningRoute.Use(middleware.BodyStorageCleanup())
+	openAliceProvisioningRoute.Use(middleware.AnonymousRequestBodyLimit())
+	openAliceProvisioningRoute.Use(middleware.OpenAliceProvisioningAuth())
+	{
+		openAliceProvisioningRoute.GET("/accounts/:external_account_id/catalog", controller.OpenAliceProvisioningCatalog)
+		openAliceProvisioningRoute.POST("/users/upsert", controller.OpenAliceProvisioningUpsertUser)
+		openAliceProvisioningRoute.POST("/tokens", controller.OpenAliceProvisioningCreateToken)
+		openAliceProvisioningRoute.POST("/tokens/:id/quota", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningAdjustTokenQuota)
+		openAliceProvisioningRoute.POST("/tokens/:id/status", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningUpdateTokenStatus)
+		openAliceProvisioningRoute.POST("/rate-limits", controller.OpenAliceProvisioningUpdateRateLimitPolicy)
+		openAliceProvisioningRoute.GET("/accounts/:external_account_id/snapshot", controller.OpenAliceProvisioningSnapshot)
+	}
+
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -281,18 +297,6 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
-		}
-
-		openAliceProvisioningRoute := apiRouter.Group("/openalice/provisioning")
-		openAliceProvisioningRoute.Use(middleware.OpenAliceProvisioningAuth())
-		{
-			openAliceProvisioningRoute.GET("/catalog", controller.OpenAliceProvisioningCatalog)
-			openAliceProvisioningRoute.POST("/users/upsert", controller.OpenAliceProvisioningUpsertUser)
-			openAliceProvisioningRoute.POST("/tokens", controller.OpenAliceProvisioningCreateToken)
-			openAliceProvisioningRoute.POST("/tokens/:id/quota", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningAdjustTokenQuota)
-			openAliceProvisioningRoute.POST("/tokens/:id/status", controller.OpenAliceProvisioningTokenIdParam, controller.OpenAliceProvisioningUpdateTokenStatus)
-			openAliceProvisioningRoute.POST("/rate-limits", controller.OpenAliceProvisioningUpdateRateLimitPolicy)
-			openAliceProvisioningRoute.GET("/accounts/:external_account_id/snapshot", controller.OpenAliceProvisioningSnapshot)
 		}
 
 		usageRoute := apiRouter.Group("/usage")
